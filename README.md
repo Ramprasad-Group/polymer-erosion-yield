@@ -11,5 +11,5 @@ polymer-erosion-yield/
 └── scripts/
     ├── data_processing.py                    # CSV → JSONL conversion for fine-tuning
     ├── finetune_and_test.py                  # fetch fine-tuned model + run inference
-    └── combined_orient_plot.py               # parity plots by orientation
+    └── combined_orient_plot.py               # parity plots
 ```
