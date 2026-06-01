@@ -7,7 +7,9 @@ Curated polymer atomic oxygen erosion yield dataset and the scripts used to fine
 polymer-erosion-yield/
 ├── data/
 │   ├── polymer_Ey_dataset_current.csv        # actively maintained current dataset
-│   └── polymer_ey_dataset_paper_v1_0_0.csv   # static paper-specific release
+│   ├── polymer_ey_dataset_paper_v1_0_0.csv   # static paper-specific release
+│   ├── GPR random split Ey.csv               # GPR Ey predictions using the random split
+│   └── GPR RG split Ey.csv                   # GPR Ey predictions using the restricted group split
 └── scripts/
     ├── data_processing.py                    # CSV → JSONL conversion for fine-tuning
     ├── finetune_and_test.py                  # fetch fine-tuned model + run inference
