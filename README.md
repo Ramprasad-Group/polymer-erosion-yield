@@ -11,7 +11,7 @@ polymer-erosion-yield/
 └── scripts/
     ├── data_processing.py                    # CSV → JSONL conversion for fine-tuning
     ├── finetune_and_test.py                  # fetch fine-tuned model + run inference
-    └── combined_orient_plot.py               # parity plots
+    └── production_figures.py                 # parity plots and comparison with GPR
 ```
 ## Workflow summary
 
@@ -24,7 +24,7 @@ The pipeline runs in three stages, from raw dataset to evaluated predictions:
    Fetch the completed fine-tuned model, optionally diagnose the job, and run inference over the train/test splits, writing predictions to CSV (`finetune_and_test.py`).
 
 3. **Evaluation & visualization**
-   Aggregate the per-split result CSVs and render log–log parity plots with OME and log R² metrics (`combined_orient_plot.py`).
+   Aggregate the per-split result CSVs and render log–log parity plots with OME and log R² metrics (`production_figures.py`).
 
 ## Installation
 
@@ -50,5 +50,5 @@ python scripts/data_processing.py
 python scripts/finetune_and_test.py
 
 # 3. Aggregate results and generate parity plots
-python scripts/combined_orient_plot.py
+python scripts/production_figures.py
 ```
