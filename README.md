@@ -54,7 +54,7 @@ polymer-erosion-yield/
 
 ### Target Property
 
-The primary target variable is the atomic oxygen erosion yield (`e_y`) or log erosion yield (`log(e_y)`), which quantifies the volume of material removed per incident oxygen atom. Both raw and log-transformed values are provided in the dataset.
+The primary target variable is the log atomic oxygen erosion yield (`log(e_y)`), which quantifies the volume of material removed per incident oxygen atom. Both raw and log-transformed values are provided in the dataset.
 
 ### Data Source
 
