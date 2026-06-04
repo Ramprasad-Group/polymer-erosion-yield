@@ -30,7 +30,7 @@ polymer-erosion-yield/
 ### Dataset Statistics
 
 * **Total samples:** 195
-* **Number of features:** 11
+* **Number of features:** 10
 * **Target property:** Atomic oxygen erosion yield
 
 ### Column Description
