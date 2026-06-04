@@ -41,8 +41,8 @@ polymer-erosion-yield/
 | `coating name`               | Coating applied to the material (if any)  |
 | `smiles`                     | Polymer repeat-unit SMILES representation |
 | `layers`                     | Number of layers                          |
-| `thickness (mils)`           | Thickness in mils                         |
-| `thickness (mm)`             | Thickness in millimeters                  |
+| `thickness (mils)`           | Per layer thickness in mils               |
+| `thickness (mm)`             | Per layer thickness in millimeters        |
 | `e_y (cm3/atom)`             | Erosion yield in cm³/atom                 |
 | `e_y (A3/atom)`              | Erosion yield in Å³/atom                  |
 | `log(e_y)`                   | Log-transformed erosion yield             |
