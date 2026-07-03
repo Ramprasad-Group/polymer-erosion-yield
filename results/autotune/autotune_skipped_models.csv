@@ -1,0 +1,3 @@
+base_model,error
+gpt-4o,"BadRequestError: Error code: 400 - {'error': {'message': 'Model gpt-4o is not available for fine-tuning or does not exist.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_available'}}"
+gpt-4o-mini,"BadRequestError: Error code: 400 - {'error': {'message': 'Model gpt-4o-mini is not available for fine-tuning or does not exist.', 'type': 'invalid_request_error', 'param': None, 'code': 'model_not_available'}}"
