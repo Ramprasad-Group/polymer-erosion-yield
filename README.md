@@ -1,6 +1,6 @@
 # polymer-erosion-yield
 
-Curated polymer atomic-oxygen erosion-yield dataset and a unified pipeline for fine-tuning and evaluating an LLM-based erosion-yield predictor, benchmarking it against traditional ML.
+Curated polymer atomic-oxygen erosion-yield dataset and a unified pipeline for fine-tuning and evaluating an LLM-based erosion-yield predictor against traditional ML.
 
 ## Overview
 
