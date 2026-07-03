@@ -1,0 +1,40 @@
+{
+  "base_model": "gpt-4o-2024-08-06",
+  "splits": {
+    "1": {
+      "train_file_id": "file-Lbr582XmeVU1J6XPZpWHzK",
+      "job_id": "ftjob-oMI5Qrb6l0pTv7uqqJVkKyFN",
+      "status": "succeeded",
+      "fine_tuned_model": "ft:gpt-4o-2024-08-06:ramprasad-group::Dsji61r1",
+      "result_file": "/data/jared/FINAL-LEO-LLM-PAPER3/splits/production/split_01/ftjob-oMI5Qrb6l0pTv7uqqJVkKyFN_result.csv"
+    },
+    "2": {
+      "train_file_id": "file-2MpBXqVSQfebYEzhpbPLnY",
+      "job_id": "ftjob-aaboVYjrcIoBbn6ZHLmbY3yB",
+      "status": "succeeded",
+      "fine_tuned_model": "ft:gpt-4o-2024-08-06:ramprasad-group::Dsk6NEdi",
+      "result_file": "/data/jared/FINAL-LEO-LLM-PAPER3/splits/production/split_02/ftjob-aaboVYjrcIoBbn6ZHLmbY3yB_result.csv"
+    },
+    "3": {
+      "train_file_id": "file-Xy7gPyuPnUB5sjv3xu3PyZ",
+      "job_id": "ftjob-RMyhKoay0wE88PCna39UvMc0",
+      "status": "succeeded",
+      "fine_tuned_model": "ft:gpt-4o-2024-08-06:ramprasad-group::Dsk38EEc",
+      "result_file": "/data/jared/FINAL-LEO-LLM-PAPER3/splits/production/split_03/ftjob-RMyhKoay0wE88PCna39UvMc0_result.csv"
+    },
+    "4": {
+      "train_file_id": "file-9cXwkEi5B8rWBunAj5BzKJ",
+      "job_id": "ftjob-olErsR6F3BlJxlAmuJGPGst9",
+      "status": "succeeded",
+      "fine_tuned_model": "ft:gpt-4o-2024-08-06:ramprasad-group::DslhXXja",
+      "result_file": "/data/jared/FINAL-LEO-LLM-PAPER3/splits/production/split_04/ftjob-olErsR6F3BlJxlAmuJGPGst9_result.csv"
+    },
+    "5": {
+      "train_file_id": "file-TADFazWQY9kB3drfEgbQrv",
+      "job_id": "ftjob-Owv3kn7S2kCuavBuW3HZzzPm",
+      "status": "succeeded",
+      "fine_tuned_model": "ft:gpt-4o-2024-08-06:ramprasad-group::DslfDKC1",
+      "result_file": "/data/jared/FINAL-LEO-LLM-PAPER3/splits/production/split_05/ftjob-Owv3kn7S2kCuavBuW3HZzzPm_result.csv"
+    }
+  }
+}
