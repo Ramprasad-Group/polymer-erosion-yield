@@ -4,7 +4,7 @@ Curated polymer atomic-oxygen erosion-yield dataset and a unified pipeline for f
 
 ## Overview
 
-This repository contains a curated dataset of polymer atomic oxygen (AO) erosion yields compiled from low Earth orbit (LEO) spaceflight experiments, together with the pipeline used to produce the paper's results. The pipeline prepares chemistry-grouped data splits, fine-tunes and runs inference on OpenAI models, autotunes the LLM configuration, generates the parity figures, and benchmarks the LLM against a suite of traditional ML models on the identical test set.
+This repository contains a curated dataset of polymer atomic oxygen (AO) erosion yields compiled from low Earth orbit (LEO) spaceflight experiments, together with the pipeline used and results reported in the accompanying manuscript. The pipeline prepares chemistry-grouped data splits, fine-tunes and runs inference on OpenAI models, autotunes the LLM configuration, generates the parity plots, and benchmarks the LLM against a suite of traditional ML architectures on the identical chemistry-group 5-fold CV.
 
 The pipeline is distributed as a single script, `scripts/leo_pipeline.py`, driven by a `mode` argument. Keeping the split rule, canonicalizer, metrics, and both prediction paths in one source file is deliberate: it guarantees the LLM and ML benchmarks always share the same splits and evaluation, so the paper's numbers come from one reproducible file rather than a chain of scripts that can drift out of sync.
 
