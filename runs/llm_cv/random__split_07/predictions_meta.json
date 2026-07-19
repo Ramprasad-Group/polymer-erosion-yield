@@ -1,0 +1,10 @@
+{
+  "model": "ft:gpt-4o-2024-08-06:ramprasad-group::Dzd2qNZw",
+  "temperature": 0.25,
+  "repeats": 10,
+  "variant": "base",
+  "n_rows": 20,
+  "split_hash": "1a2a450e4631",
+  "n_reused": 0,
+  "n_newly_inferred": 20
+}

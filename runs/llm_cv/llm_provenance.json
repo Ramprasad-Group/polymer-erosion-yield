@@ -1,0 +1,51 @@
+{
+  "tag": "llm",
+  "seed": 42,
+  "fp_bits": 2048,
+  "fp_radius": 2,
+  "kernel": "tanimoto_rbf",
+  "infer_repeats": 10,
+  "var_bins": 5,
+  "n_random": 10,
+  "n_variable": 10,
+  "data_hash": null,
+  "membership_hash": null,
+  "rg_split_hash": null,
+  "per_fold_counts": {
+    "restricted-group": [
+      6,
+      6,
+      6,
+      6,
+      5
+    ],
+    "random": [
+      21,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20
+    ],
+    "variable": [
+      21,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20
+    ]
+  },
+  "n_points_by_strategy": {
+    "restricted-group": 29,
+    "random": 201,
+    "variable": 181
+  }
+}

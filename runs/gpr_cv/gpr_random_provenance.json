@@ -1,0 +1,31 @@
+{
+  "tag": "gpr_random",
+  "seed": 42,
+  "fp_bits": 2048,
+  "fp_radius": 2,
+  "kernel": "tanimoto_rbf",
+  "infer_repeats": 10,
+  "var_bins": 5,
+  "n_random": 10,
+  "n_variable": 10,
+  "data_hash": "0ec46fd91c0e4d2f61ba40b20f7da7d1",
+  "membership_hash": "c17fb4706220f84261ca2a2fc5088d15",
+  "rg_split_hash": null,
+  "per_fold_counts": {
+    "random": [
+      21,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20
+    ]
+  },
+  "n_points_by_strategy": {
+    "random": 201
+  }
+}

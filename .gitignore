@@ -1,0 +1,4 @@
+openai_api_key.txt
+__pycache__/
+*.pyc
+.DS_Store
