@@ -4,7 +4,7 @@ Curated polymer atomic-oxygen erosion-yield dataset and a unified pipeline compa
 
 ## Overview
 
-This repository contains a curated dataset of polymer atomic oxygen (AO) erosion yields compiled from low Earth orbit (LEO) spaceflight experiments, together with the pipeline and results reported in the accompanying manuscript. The pipeline fine-tunes and runs inference on OpenAI models, fits GPR with a Tanimoto + RBF kernel on Morgan fingerprints, tunes both, and evaluates both on the same three split strategies (restricted-group, random and variable) with the same metrics, so the comparison comes from one reproducible file rather than a chain of scripts that can drift out of sync.
+This repository contains a curated dataset of polymer atomic oxygen (AO) erosion yields compiled from low Earth orbit (LEO) spaceflight experiments, together with the pipeline and results reported in the accompanying manuscript. The pipeline fine-tunes and runs inference on OpenAI models, fits GPR with a Tanimoto + RBF kernel on Morgan fingerprints, optimizes both, and evaluates both on the same three split strategies (restricted-group and random) with the same metrics, so the comparison comes from one reproducible file.
 
 ## Repository layout
 
@@ -20,21 +20,21 @@ polymer-erosion-yield/
 
 ## Dataset
 
-The target is the atomic-oxygen erosion yield `e_y (A3/atom)`, the material volume removed per incident oxygen atom; the pipeline models its base-10 logarithm. Data is compiled from multiple LEO missions and exposure studies (MISSE, EOIM, LDEF, STS and related).
+The target is the atomic-oxygen erosion yield `e_y (A3/atom)`, the material volume removed per incident oxygen atom; the pipeline models its base-10 logarithm. Data is compiled from multiple NASA LEO missions and exposure studies.
 
 | Column                   | Description                                        |
 | ------------------------ | -------------------------------------------------- |
-| `psmiles`                | Polymer repeat-unit PSMILES representation         |
+| `psmiles`                | Canonical PSMILES representation                   |
 | `polymer name`           | Polymer name                                       |
 | `coating name`           | Coating applied to the material, if any            |
 | `mission name`           | Source mission                                     |
 | `orientation`            | Exposure orientation (ram / nadir / wake / zenith) |
 | `mission time (yr)`      | Exposure duration in years                         |
 | `solar exposure (esh)`   | Equivalent Sun Hours                               |
-| `ao fluence (atoms/cm2)` | Atomic oxygen fluence                              |
-| `layers`                 | Number of layers                                   |
+| `ao fluence (atoms/cm2)` | Incident AO per unit area                          |
+| `layers`                 | Number of thin-film layers                         |
 | `thickness (mm)`         | Per-layer thickness in millimeters                 |
-| `e_y (A3/atom)`          | Erosion yield (**target**, modeled as log10)       |
+| `e_y (A3/atom)`          | Erosion yield (**target**, log10 transformed)      |
 
 ## Installation
 
