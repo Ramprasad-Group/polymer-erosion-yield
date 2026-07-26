@@ -1,0 +1,2 @@
+OME,OME_ci_lo,OME_ci_hi,logR2,logR2_ci_lo,logR2_ci_hi,n_rows,OME_std_rows,boot_B,boot_seed,ci_level,scope,model,temperature,epochs,repeats,data_hash
+0.21553582089552237,0.16390748756218906,0.2753548383084577,0.6574783188834302,0.4722694638405789,0.805918414156223,201,0.4077293432050823,10000,42,95,in_sample,ft:gpt-4o-2024-08-06:ramprasad-group::E4tFIjD2,0.25,5,10,4e82816a9614d0be82a51f2d15978152

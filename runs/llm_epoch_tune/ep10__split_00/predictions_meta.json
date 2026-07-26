@@ -5,6 +5,6 @@
   "variant": "base",
   "n_rows": 6,
   "split_hash": "69e77a8879a9",
-  "n_reused": 0,
-  "n_newly_inferred": 6
+  "n_reused": 6,
+  "n_newly_inferred": 0
 }

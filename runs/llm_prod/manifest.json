@@ -1,0 +1,11 @@
+{
+  "units": {
+    "prod": {
+      "train_file_id": "file-SxQnGDs14cK62NBbzhkNxY",
+      "job_id": "ftjob-koyzGzwTnhA9NBC4BbWY10CY",
+      "status": "succeeded",
+      "epochs": 5,
+      "fine_tuned_model": "ft:gpt-4o-2024-08-06:ramprasad-group::E4tFIjD2"
+    }
+  }
+}

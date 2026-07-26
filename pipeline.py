@@ -10,8 +10,8 @@ MODES
   value in runs/llm_temp.json wins, and it is 0.25):
     temp-tune    sweep temperature {0.1,0.15,0.2,0.25,0.3} x RG 5-fold (reuses one
                  model per fold; temp is inference-only). Writes llm_temp.json.
-                 Rerunning is free (every temperature is cached in the llm_cv
-                 row store) and rescores with bootstrap CIs.
+                 Already run; winner 0.25. Rerunning is free (every temperature is
+                 cached in the llm_cv row store) and rescores with bootstrap CIs.
     epoch-tune   fine-tune EPOCH_GRID x RG 5-fold; the arm matching the epochs
                  llm-cv actually trained its RG models at (read from llm_cv's
                  manifest) is REUSED, so {5,10} costs 5 models, not 10. Picks best
@@ -56,7 +56,7 @@ MODES
     ablation-fig  three parity panels (baseline / +layers / +thickness) for the
                   LLM ablation, styled exactly like the restricted-group panel.
                   Rebuilt from the saved raw repeats; no API calls.
-    rebuild-bands recompute each cached row's error band as
+    rebuild-bands one-off migration: recompute each cached row's error band as
                   1 sigma (sd, ddof=1) from the saved raw/rep*.csv repeats, and
                   patch it into the row store and the saved prediction CSVs.
                   Only `band` is written -- truth/pred, and therefore OME and
@@ -76,16 +76,45 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 # ---------------------------------------------------------------------------
-# Figure fonts: Computer Modern to match the LaTeX manuscript. Family is given
-# as a list (not font.family="serif") so matplotlib falls back per glyph --
-# cmr10's TTF is missing a few glyphs (angstrom, en/em dash, unicode minus).
-# Angstroms go through mathtext (\mathrm{\AA}) and unicode_minus is off so
-# those never hit the fallback. fonttype 42 embeds TrueType; publishers reject
-# the default Type 3.
+# FONT -- match the paper body text.
+# The manuscript is set by LaTeX in Computer Modern, so the figures are too.
+# Confirm the paper's actual face with `pdffonts main.pdf`: CMR*/CMMI* -> this is
+# exact; LMRoman* (Latin Modern) -> visually identical at figure sizes, Latin
+# Modern being a Unicode redraw of Computer Modern; anything else
+# (Times/NimbusRoman/Helvetica, i.e. a class like achemso/revtex/elsarticle) ->
+# change the family ladder below, which is the only place the face is set.
+#
+# Why a LIST and not font.family="serif" + font.serif=[...]: only the list form
+# turns on matplotlib's PER-GLYPH fallback. Verified -- with font.family="serif"
+# an em dash renders as a tofu box and merely warns; with the list it silently
+# falls through to the next family. The ladder:
+#
+#   CMU Serif    Computer Modern Unicode: true CM with FULL coverage. Not
+#                bundled. `apt install fonts-cmu` (Debian/Ubuntu) and every
+#                glyph below comes from one real CM face, no fallback at all.
+#   cmr10        IS Computer Modern Roman and ships with matplotlib, so this
+#                works with zero install and cannot fail at render time the way
+#                text.usetex=True can (that needs TeX + dvipng + ghostscript on
+#                every machine that draws a figure). Its TTF is incomplete --
+#                verified MISSING: U+2014 EM DASH, U+2013 EN DASH, U+2212 MINUS,
+#                U+00C5 ANGSTROM.
+#   DejaVu Serif last resort, per glyph only. Nothing renders as tofu; at worst a
+#                dash comes from a different serif face, which is invisible at
+#                figure sizes.
+#
+# Two of cmr10's gaps are handled at the source rather than left to fallback,
+# because they carry meaning and a mixed face would be noticeable:
+#   - ANGSTROM: every one goes through mathtext as \mathrm{\AA}, never as a
+#     literal U+00C5. See PLOT_STYLE["xlabel"] and data-fig's yield axis.
+#   - MINUS: axes.unicode_minus=False makes matplotlib emit U+002D HYPHEN-MINUS,
+#     which cmr10 does have.
+# cmr10 also wants mathtext-formatted tick labels; without
+# axes.formatter.use_mathtext it warns on every figure.
 # ---------------------------------------------------------------------------
 def _font_ladder():
-    """Family list filtered to installed fonts, so matplotlib doesn't spam
-    findfont warnings for absent families."""
+    """The family list, filtered to what is actually installed. Naming an absent
+    family works but makes matplotlib emit a findfont miss for EVERY text artist
+    in every figure, which buries the warnings that matter."""
     from matplotlib import font_manager
     have = {f.name for f in font_manager.fontManager.ttflist}
     ladder = [n for n in ("CMU Serif", "cmr10", "DejaVu Serif") if n in have]
@@ -103,7 +132,7 @@ PLOT_FONT = {
 plt.rcParams.update(PLOT_FONT)
 
 
-# ================================ shared core ================================
+# ===================== shared core (formerly leo_core.py) =====================
 
 from sklearn.model_selection import ShuffleSplit, StratifiedShuffleSplit, StratifiedKFold
 from sklearn.gaussian_process import GaussianProcessRegressor
@@ -132,6 +161,10 @@ ORIENT_LEVELS = ["ram", "zenith", "nadir", "wake", "unknown"]
 # ---------------------------------------------------------------------------
 PLOT_STYLE = {
     # font sizes, per element
+    # Modest, consistent bump over the original 15/13/11/11/11/10/10/10. NOT a big
+    # jump: 7.50pt already renders identically across figures, and on the 3-across
+    # panels the text occupies MORE of the panel, not less, so over-inflating it
+    # worsens crowding. ~+3pt lifts legibility without that.
     "title_size":        18,
     "axis_label_size":   16,
     "tick_label_size":   13,
@@ -159,22 +192,54 @@ PLOT_STYLE = {
 }
 
 # ---------------------------------------------------------------------------
-# Font scaling: LaTeX shrinks a figure by textwidth/fig_width_in, so equal
-# point sizes render unequal on the page. scaled_style() multiplies every size
-# in PLOT_STYLE by fig_width_in/CANON_FIG_WIDTH_IN, which cancels that out --
-# text lands the same physical size for any figure width, assuming inclusion at
-# width=\textwidth (pass inclusion_fraction otherwise). Only text sizes scale;
-# markers/lines are left alone since scaling them changes how the data reads.
+# WIDTH-INVARIANT FONT SCALING
+#
+# The sizes in PLOT_STYLE are the CANONICAL set: the ones that produced the
+# reference tuning figure, at CANON_FIG_WIDTH_IN wide.
+#
+# Setting the same point size on every figure does NOT put the same size on the
+# page. LaTeX scales a figure by (textwidth / fig_width_in), so a wide figure is
+# shrunk more and its text lands smaller:
+#
+#     rendered_pt = size_pt * textwidth / fig_width_in
+#
+# With the widths this file used to hard-code (5.5 to 19.8 in) that was a 3.5x
+# spread across the paper's figures. PLOT_STYLE["ablation_overrides"] used to be
+# a hand-tuned partial correction for exactly this -- bumping the 16.8in ablation
+# row's title 15->18 so it landed near the 13in tuning figure's. That guesswork is
+# now arithmetic and the overrides are gone, along with the mutate-the-global-
+# then-restore-in-a-finally dance they needed (which could leak a font size into
+# an unrelated figure if a draw ever raised).
+#
+# scaled_style() multiplies every size by (fig_width_in / CANON_FIG_WIDTH_IN),
+# which cancels fig_width_in out of the line above and leaves
+# size_pt * textwidth / CANON_FIG_WIDTH_IN -- identical on the page for every
+# figure at any width or panel count. textwidth cancels between figures, so its
+# value is never needed.
+#
+# ASSUMES every figure is included at width=\textwidth. A figure included at a
+# fraction f of that renders f times smaller no matter what matplotlib does; pass
+# fig_width_in / f for such a figure.
+#
+# Only text sizes scale. Marker size, line width and capsize are deliberately
+# left alone -- they are in points too, so strictly they have the same problem,
+# but changing them alters how the DATA reads, not just the labels.
 # ---------------------------------------------------------------------------
 CANON_FIG_WIDTH_IN = 13.0
 
 # ---------------------------------------------------------------------------
-# Every multi-panel parity figure is built from the same cell (one column =
-# PARITY_PANEL_W_IN x PARITY_PANEL_H_IN, plus a suptitle strip where needed)
-# with fonts from scaled_style(fig_w), so at width=\textwidth all figures put
-# identical text sizes and square panels on the page. Panels of figures with
-# different column counts necessarily differ in size; equal fonts is what is
-# enforced.
+# SHARED PARITY CELL -- every multi-panel parity figure (validation-fig,
+# ablation-fig, gpr-ablation-fig) is built from the SAME cell: PARITY_PANEL_W_IN
+# wide per column, PARITY_PANEL_H_IN tall per row (+ a suptitle strip where one
+# exists), and takes its fonts from scaled_style(fig_w). With every figure
+# included at width=\textwidth, scaled_style makes EVERY text element (title,
+# axis labels, ticks, legend, legend title, metrics box, colourbar text,
+# suptitle) render at the SAME physical size on the page across all figures.
+# The identical cell + set_box_aspect(1) keep every panel square and every
+# same-column-count figure's panels identical; a 2-column figure's panels
+# necessarily render 1.5x a 3-column figure's at equal inclusion width -- equal
+# panel size AND equal fonts at equal inclusion width is impossible across
+# different column counts, and equal fonts is what is enforced.
 # ---------------------------------------------------------------------------
 PARITY_PANEL_W_IN   = 6.33   # one parity column, inches (matches the reference
                              # validation figure, whose panels are the target look)
@@ -709,12 +774,28 @@ def metrics(y_true, y_pred):
     return ome, r2
 
 # ---- row-bootstrap uncertainty on the panel metrics --------------------------
-# Both OME and log-R2 get a percentile CI from the same row resamples, computed
-# identically for both models. The intervals are per-panel and NOT paired
-# (aggregate prediction CSVs carry no row identifier, so pairing can't be
-# verified) -- overlapping CIs are not a test of no difference between models.
-# Per-point error bars (LLM decode sd, GPR posterior sd) are separate from this;
-# only row-level mean predictions are resampled.
+# OME is a mean of per-row absolute errors and so has a natural dispersion (the
+# std of those errors). log-R2 is 1 - SSres/SStot computed ONCE over the set --
+# there is no per-row R2, so it has no dispersion. Reporting "OME +/- row-error
+# SD" beside "logR2 +/- estimator SE" would put two different quantities under
+# one +/-. Instead BOTH metrics get the same thing: a percentile CI from the same
+# resampled rows.
+#
+# The resample indices depend only on (n, seed), so any two panels with the same
+# n draw the same index numbers. That is NOT the same as drawing the same
+# samples: it would only be a true pairing if row i were the same observation in
+# both files, and the aggregate prediction CSVs carry no row identifier (no
+# smiles), so that cannot be verified. These intervals are therefore computed
+# IDENTICALLY for both models but are NOT paired, and must not be described as
+# such. They are valid as separate per-panel uncertainties.
+#
+# A formal "LLM beats GPR" claim needs more than two separate CIs -- overlapping
+# CIs are not a test of no difference. That requires verified row alignment and
+# a bootstrap CI on the metric DIFFERENCE, which is not implemented.
+#
+# The per-point error bars (LLM: sd across decodes; GPR: posterior predictive sd)
+# are NOT part of this -- only the row-level mean predictions are resampled, so
+# the procedure is identical for both models.
 METRIC_CI = {
     "B":                10000,   # resamples
     "seed":             42,
@@ -2107,8 +2188,8 @@ TUNING_FIG = {
     "ome_marker":    "s",
     "line_width":    1.5,
     "marker_size":   6,
-    "figsize":       (13.0, 10.0),
-    "height_ratios": [1.2, 0.8],   # parity row taller than the sweep row
+    "figsize":       (13.0, 12.0),
+    "height_ratios": [1.0, 1.0],   # equal rows; 12in preserves the original epoch-panel size
 }
 
 ORIENT_MARKERS = {"ram": "o", "zenith": "^", "nadir": "s", "wake": "D", "unknown": "X"}
@@ -2644,7 +2725,7 @@ def _draw_parity_panel(ax, fig, sub, s, title, show_legend=True, show_colorbar=T
                     f"{n_folds} folds, n = {len(yt)} rows")
     # DEFER placement to after the caller's final tight_layout(): tight_layout
     # rescales the axes, so any position computed here is measured against a
-    # transform that no longer holds at render time. We
+    # transform that no longer holds at render time (this was a real bug). We
     # stash what placement needs; finalize_parity_panels(fig), invoked from
     # _savefig_multi after layout, does the work -- always testing BOTH the legend
     # and the metrics box against the data, whether or not this panel shows a
@@ -3436,6 +3517,7 @@ def mode_tuning_fig(args):
             [("logR2", T["logr2_color"], T["logr2_marker"], "Log R$^2$"),
              ("OME",   T["ome_color"],   T["ome_marker"],   "OME")]):
         ax = fig.add_subplot(gs[1, ci])
+        ax.set_box_aspect(1)
         # No error bars, deliberately. temp_tune_results.csv now carries real
         # bootstrap CIs (OME_ci_lo/hi, logR2_ci_lo/hi), so bars COULD be drawn
         # here -- the reason they are not is a presentation choice, not a missing
