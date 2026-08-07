@@ -110,50 +110,6 @@ python pipeline.py <mode> --data_csv polymer_Ey_dataset_final.csv --rg_dir rg
 
 If you use this dataset or pipeline, please cite the accompanying published work.
 
-## Reproducibility, saved paper results, and dataset revision
+## Reproducibility and dataset correction
 
-The paper cross-validation prediction artifacts in `runs/` are intentionally preserved exactly as generated. The corrected canonical dataset was finalized afterward. Relative to the paper-era inputs, it corrects the PSMILES for the Kevlar entries, Teflon PFA 200 CLP and Nomex T-410, corrects the Nomex T-410 material name, and includes the finalized coating cleanup. The pipeline also repairs the known indium-tin-oxide-coated silver-Teflon coating field at load time.
-
-The repository preserves both the exact paper-era validation inputs and the corrected canonical dataset. The two symmetric top-level split folders are the deliberate data-source switch:
-
-- `random/` **and** `rg/` both present -> exact paper-era random and restricted-group inputs.
-- `random/` **and** `rg/` both deleted -> both splits are rebuilt from the corrected `polymer_Ey_dataset_final.csv` using the frozen row-index memberships in `runs/`.
-- only one present -> the pipeline stops rather than mixing historical and corrected inputs.
-
-The shipped `runs/llm_cv` and `runs/gpr_cv` directories are frozen paper-result caches. Deleting a whole model CV directory is the explicit retraining opt-in. Normal commands leave those results unchanged.
-
-To retrain the paper validation splits exactly, leave `random/` and `rg/` in place and delete only the model cache you intend to rebuild:
-
-```bash
-# exact paper-era GPR validation retrain
-rm -rf runs/gpr_cv
-python pipeline.py gpr-cv --split restricted-group
-python pipeline.py gpr-cv --split random
-
-# exact paper-era LLM validation retrain
-rm -rf runs/llm_cv
-python pipeline.py llm-cv --split restricted-group
-python pipeline.py llm-cv --split random
-```
-
-To switch both validation splits to the corrected dataset, deliberately remove both paper-input folders, then remove whichever model cache you want to retrain:
-
-```bash
-# one explicit data-source switch for BOTH validation splits
-rm -rf random rg
-
-# then choose the model(s) to retrain
-rm -rf runs/gpr_cv
-python pipeline.py gpr-cv --split restricted-group
-python pipeline.py gpr-cv --split random
-
-rm -rf runs/llm_cv
-python pipeline.py llm-cv --split restricted-group
-python pipeline.py llm-cv --split random
-```
-
-Do **not** delete `runs/random_split_membership.csv` or `runs/restricted-group_split_membership.csv` for a corrected-data rerun. They store only the intended fold membership; once `random/` and `rg/` are absent, the actual row contents are read from the corrected master dataset.
-
-For LLM CV, the pipeline refuses a partial rebuild if strategy-level results are missing while old per-fold/model state remains, preventing accidental reuse of historical fine-tuned model IDs. Saved fine-tuned model IDs belong to the original OpenAI organization; rebuilding under another account requires new fine-tuning and is separate from reading the saved paper artifacts.
-
-Figure modes use saved prediction files; they do not retrain either model.
+Three PSMILES entries, Kevlar, Nomex, and PFA, contained minor typos that were identified and corrected after the reported models were trained. To reproduce the reported results, do nothing; to rerun using the corrected dataset, delete both `random/` and `rg/` before running the pipeline.
