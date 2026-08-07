@@ -1,4 +1,8 @@
 openai_api_key.txt
+.env
+.env.*
+.venv/
+venv/
 __pycache__/
 *.pyc
 .DS_Store

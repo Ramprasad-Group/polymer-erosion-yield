@@ -19,9 +19,9 @@ MODES
                  INFER_REPEATS repeats/point.
     llm-cv       final CV: winning epochs on RG(5)+random(10)+variable(10) = 25
                  models, INFER_REPEATS repeats per test point (test only).
-    llm-report   read-only: score whatever llm-cv models are already finished in
-                 the manifest (partial results while llm-cv still runs). Runs
-                 inference on completed splits only; makes API calls.
+    llm-report   report whatever llm-cv models are already finished in the
+                 manifest (partial results while llm-cv still runs). Reuses cached
+                 rows; uncached completed units can require inference/API calls.
     llm-prod     1 model on all 201, INFER_REPEATS repeats per point, one parity.
     llm-ablation layers/thickness ablation (baseline / +layers / +thickness),
                  matched-control rows. Built for completeness; costs money to run.
@@ -39,13 +39,17 @@ MODES
 
   Reporting / figures (no API calls, no fitting -- safe to run any number of times):
     plot-only     redraw one saved *_predictions.csv (--pred_csv PATH).
-    validation-fig  combined 2 x N figure of the CROSS-VALIDATION results (LLM
-                  top row, GPR bottom, one column per split), from saved
-                  predictions; --fig_splits selects the columns. This is the
-                  validation figure -- NOT production: production is llm-prod /
-                  gpr-prod, a single model fit on all 201 rows.
+    validation-fig  fixed 2 x 2 figure of the CROSS-VALIDATION results from
+                  saved predictions: LLM top row, GPR bottom row; restricted-group
+                  and random columns only. The variable split is not part of this
+                  figure. This is validation -- NOT production: production is
+                  llm-prod / gpr-prod, a single model fit on all 201 rows.
     data-fig      dataset-description figure: per-chemistry sample counts, and AO
                   fluence / erosion yield stacked by orientation.
+    descriptor-fig  pairwise scatterplots of every numerical descriptor against
+                  every other numerical descriptor and against erosion yield.
+                  Uses all available rows separately in each panel, so missing
+                  layers/thickness values do not remove rows from other panels.
     tuning-fig    2 x 2: parity for each epoch arm (shared axis range) over the
                   temperature sweep of log-R2 and OME. Requires completed
                   temp-tune and epoch-tune artifacts; refuses to substitute the
@@ -62,11 +66,14 @@ MODES
                   Only `band` is written -- truth/pred, and therefore OME and
                   log-R2, are untouched. Reads no dataset, makes no API calls.
 
-Every mode takes --data_csv (the 201-row canonical CSV) and, where restricted-
-group is involved, --rg_dir (your provided RG split_* folders).
+Every mode takes --data_csv (the 201-row canonical CSV). The optional --rg_dir
+points to the historical paper RG split_* directory; its sibling top-level random/
+directory stores the historical random split. When BOTH explicit split directories
+exist, random/RG retraining uses the exact paper-era CSVs. When BOTH are absent,
+those two splits are rebuilt from the corrected canonical CSV via frozen membership.
 """
 
-import os, sys, json, time, argparse, glob, csv, hashlib
+import os, sys, json, time, argparse, glob, csv, hashlib, re
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
@@ -279,11 +286,8 @@ def scaled_style(fig_width_in, inclusion_fraction=1.0):
         st[key] = PLOT_STYLE[key] * k
     return st
 
-# Restricted-group panels: one marker shape AND one colour per split, so the
-# splits stay separable in greyscale and to colour-blind readers. Matches the
-# reference figure.
-# RG-split panels use CIRCLES for every split (colour alone separates them):
-# marker shape is reserved for orientation in the random/variable panels.
+# Legacy constant retained for compatibility with saved plotting calls.
+# All current parity panels encode marker shape by orientation; ram is a circle.
 SPLIT_MARKERS = ["o"]
 
 def _pretty_title(tag, strategy):
@@ -334,8 +338,8 @@ def load_master_csv(path):
     return df.reset_index(drop=True)
 
 def load_rg_dir(rg_dir):
-    """Return [(train_df, test_df)] for the provided restricted-group split_*
-    folders, header-normalized to the internal schema."""
+    """Return [(train_df, test_df)] for explicit split_* train/test CSV folders
+    (historical restricted-group or random), normalized to the internal schema."""
     def _load(p):
         d = pd.read_csv(p)
         d.columns = [c.strip() for c in d.columns]
@@ -343,7 +347,16 @@ def load_rg_dir(rg_dir):
         # 'mission time (yr)', ...), then RG-export aliases (smiles1, num_*),
         # so RG files written in EITHER schema normalize to internal names.
         ren = {**MASTER_REN, **RG_REN}
-        return d.rename(columns={k: v for k, v in ren.items() if k in d.columns})
+        d = d.rename(columns={k: v for k, v in ren.items() if k in d.columns})
+        # Apply the same ITO coating repair as load_master_csv so loading an RG
+        # export and loading the canonical master produce identical model inputs.
+        if "polymer name" in d.columns and "coating name" in d.columns:
+            d["coating name"] = d["coating name"].astype(object)
+            ito = (d["polymer name"].str.contains("indium tin oxide coated silver",
+                                                   case=False, na=False)
+                   & d["coating name"].isna())
+            d.loc[ito, "coating name"] = "indium tin oxide coated silver"
+        return d
     out = []
     for sd in sorted(glob.glob(os.path.join(rg_dir, "split_*"))):
         tr = glob.glob(os.path.join(sd, "train*.csv"))
@@ -437,11 +450,11 @@ def _rg_split_hash(rg_dir):
 
 def _gpr_cache_valid(run_dir, strategy, data_csv, out_dir, bits, radius, kernel,
                      rg_dir=None):
-    """True only if saved gpr_<strategy>_predictions.csv is a valid current
-    result: exists, provenance matches the ACTUAL optimized GPR config, dataset
-    hash and membership/RG-split hash match, expected fold count, per-fold row
-    counts, and strategy+fold IDs all match. Any error or mismatch -> False so
-    the caller safely recomputes (never crashes on a malformed cache)."""
+    """Audit helper: test whether a saved GPR strategy result matches the current
+    config, dataset and split definition. The final-release ``gpr-cv`` command
+    deliberately does NOT use this helper to trigger refitting: existing paper
+    predictions are immutable unless their predictions file is explicitly
+    deleted first."""
     pred = os.path.join(run_dir, f"gpr_{strategy}_predictions.csv")
     prov = os.path.join(run_dir, f"gpr_{strategy}_provenance.json")
     if not (os.path.exists(pred) and os.path.exists(prov)):
@@ -536,22 +549,28 @@ def _load_split_membership(pool, out_dir, strategy):
     return splits
 
 def generate_rg_splits(pool, n=5):
-    """Rebuild the restricted-group folds from the dataset alone.
+    """Rebuild the exact restricted-group folds from the master dataset.
 
     The RG test set is the set of SINGLETON chemistries -- those with exactly one
-    row -- so every test chemistry is entirely unseen in training. They are
-    shuffled with seed SEED and dealt into n contiguous groups:
+    row -- so every test chemistry is entirely unseen in training. The original
+    split construction preserved the singleton chemistries in MASTER-DATASET ROW
+    ORDER, then shuffled that ordered list with ``default_rng(SEED)`` and divided
+    it into five contiguous groups:
 
-        singles = chemistries with exactly one row      (29 of 55 here)
+        singles = singleton chemistries in master-row order   (29 of 55 here)
         perm    = np.random.default_rng(SEED).permutation(singles)
-        folds   = np.array_split(perm, n)               (6/6/6/6/5)
+        folds   = np.array_split(perm, n)                     (6/6/6/6/5)
 
-    Verified to reproduce the provided rg/split_* folders EXACTLY -- all five
-    folds, in order, at the row level. This makes RG reproducible from the CSV
-    the same way random/variable are, so the pipeline can be re-run end to end
-    from the dataset alone; the rg/ files remain authoritative when present."""
+    The row-order step is essential: ``value_counts()`` may reorder equal-count
+    items and therefore does not reproduce the historical fold assignment. This
+    construction is verified against all five supplied RG test folds exactly.
+    """
     counts = pool["smiles"].value_counts()
-    singles = list(counts[counts == 1].index)
+    singleton_set = set(counts[counts == 1].index)
+    # Preserve first appearance in the canonical master CSV. Because every item
+    # in singleton_set occurs exactly once, this is the exact original ordering.
+    singles = [smiles for smiles in pool["smiles"].tolist()
+               if smiles in singleton_set]
     perm = np.random.default_rng(SEED).permutation(singles)
     out = []
     for chunk in np.array_split(perm, n):
@@ -560,24 +579,75 @@ def generate_rg_splits(pool, n=5):
         out.append((tr, te))
     return out
 
+def _paper_random_dir(rg_dir):
+    """Sibling random/ directory paired with the historical rg/ directory."""
+    if not rg_dir:
+        return None
+    rg_norm = os.path.normpath(rg_dir)
+    parent = os.path.dirname(rg_norm)
+    return os.path.join(parent, "random") if parent else "random"
+
+def _has_explicit_split_dir(path):
+    if not path or not os.path.isdir(path):
+        return False
+    for sd in glob.glob(os.path.join(path, "split_*")):
+        if (glob.glob(os.path.join(sd, "train*.csv"))
+                and glob.glob(os.path.join(sd, "test*.csv"))):
+            return True
+    return False
+
+def _paper_split_dirs(rg_dir):
+    """Return (use_paper_inputs, random_dir).
+
+    The historical paper inputs are intentionally symmetric: top-level ``rg/``
+    and ``random/`` must either BOTH exist or BOTH be absent.  Both present means
+    exact paper-era train/test CSVs are executable inputs.  Both absent means the
+    two splits are rebuilt from the corrected canonical dataset using the frozen
+    row-index memberships.  A one-folder state is rejected so a run can never
+    silently mix historical and corrected inputs.
+    """
+    random_dir = _paper_random_dir(rg_dir)
+    has_rg = _has_explicit_split_dir(rg_dir)
+    has_random = _has_explicit_split_dir(random_dir)
+    if has_rg != has_random:
+        present = rg_dir if has_rg else random_dir
+        missing = random_dir if has_rg else rg_dir
+        sys.exit("paper CV split folders must be present or absent as a pair: "
+                 f"found {present!r} but not {missing!r}. Restore both for exact "
+                 "paper reproduction, or delete both to rebuild random and "
+                 "restricted-group from the corrected master dataset.")
+    return has_rg and has_random, random_dir
+
 def get_splits(strategy, pool, rg_dir=None, out_dir="runs"):
-    if strategy == "restricted-group":
-        # the provided rg/ folders are authoritative when present (they are what
-        # the trained models used); regenerate from the pool only if absent.
-        if rg_dir and glob.glob(os.path.join(rg_dir, "split_*")):
-            return load_rg_dir(rg_dir)
-        print("restricted-group: no rg/split_* folders found -- regenerating the "
-              "folds from the dataset (singleton chemistries, seed 42).")
-        return generate_rg_splits(pool)
-    # random / variable: if a frozen membership file exists, load it (exact,
-    # reproducible, version-independent). Otherwise generate deterministically
-    # and freeze it to disk so all future runs are identical.
+    if strategy in ("restricted-group", "random"):
+        use_paper, random_dir = _paper_split_dirs(rg_dir)
+        if use_paper:
+            src = rg_dir if strategy == "restricted-group" else random_dir
+            return load_rg_dir(src)
+
+        # Corrected-data mode: both historical split folders were deliberately
+        # removed. Preserve the exact paper fold assignment by row index, but pull
+        # every row's CURRENT contents from the canonical master dataset.
+        frozen = _load_split_membership(pool, out_dir, strategy)
+        if frozen is not None:
+            return frozen
+        if strategy == "restricted-group":
+            print("restricted-group: no frozen membership found -- regenerating the "
+                  "exact folds from the corrected dataset (singleton chemistries in "
+                  "master-row order, seed 42).")
+            splits = generate_rg_splits(pool)
+        else:
+            print("random: no frozen membership found -- regenerating 10-fold KFold "
+                  "from the corrected dataset (shuffle=True, seed 42).")
+            splits = random_splits(pool)
+        _save_split_membership(splits, pool, out_dir, strategy)
+        return splits
+
+    # Variable split is independent of the paper-input-folder switch.
     frozen = _load_split_membership(pool, out_dir, strategy)
     if frozen is not None:
         return frozen
-    if strategy == "random":
-        splits = random_splits(pool)
-    elif strategy == "variable":
+    if strategy == "variable":
         splits = variable_splits(pool)
     else:
         raise ValueError(f"unknown strategy: {strategy}")
@@ -1236,7 +1306,8 @@ def mode_llm_temp_tune(args):
     them directly. Inference is cached per (row, model, temperature) in the
     llm_cv row store, so the temperature you already ran RG at costs nothing to
     re-score; only the other temperatures make calls."""
-    rg = load_rg_dir(args.rg_dir)
+    pool = load_master_csv(args.data_csv)
+    rg = get_splits("restricted-group", pool, args.rg_dir, args.out_dir)
     run_dir = os.path.join(args.out_dir, "llm_cv")   # reuse llm_cv's models + row store
     models = _cv_rg_models(args)
     missing = [k for k in range(len(rg)) if k not in models]
@@ -1325,7 +1396,8 @@ def mode_llm_epoch_tune(args):
     DEFAULT_EPOCHS, so that arm of the grid is REUSED rather than retrained --
     only the other epoch settings cost fine-tunes. With EPOCH_GRID = [5, 10] and
     llm-cv trained at 5, that is 5 new models instead of 10."""
-    rg = load_rg_dir(args.rg_dir)
+    pool = load_master_csv(args.data_csv)
+    rg = get_splits("restricted-group", pool, args.rg_dir, args.out_dir)
     run_dir = os.path.join(args.out_dir, "llm_epoch_tune")
     cv_dir = os.path.join(args.out_dir, "llm_cv")
     reuse = _cv_rg_models(args)
@@ -1456,42 +1528,99 @@ def _best_epochs(args):
         return args.epochs
     return DEFAULT_EPOCHS   # epoch-tune not run: fall back to the default
 
+def _llm_saved_strategy_predictions(run_dir, strategy):
+    """Return an existing final/partial strategy-level LLM predictions file.
+    These files are the immutability guard for the final paper release."""
+    final = os.path.join(run_dir, f"llm_{strategy}_predictions.csv")
+    partial = os.path.join(run_dir, f"llm_partial_{strategy}_predictions.csv")
+    if os.path.exists(final):
+        return final
+    if os.path.exists(partial):
+        return partial
+    return None
+
+
 def mode_llm_cv(args):
-    """Winning epochs on RG(5)+random(10)+variable(10) = 25 models; 10 repeats/test."""
+    """LLM CV workflow. Final-release strategy artifacts are immutable: if a
+    strategy-level final or partial predictions CSV already exists, that strategy
+    is skipped BEFORE train/test JSONLs are written, fine-tunes are submitted, or
+    inference is attempted. A clean retrain requires deleting the whole llm_cv
+    run directory; random/ + rg/ present selects exact paper inputs, while both
+    absent selects corrected-master inputs."""
     pool = load_master_csv(args.data_csv)
     epochs = _best_epochs(args)
     temp = _best_temp(args)
     run_dir = os.path.join(args.out_dir, "llm_cv")
-    splits = {s: get_splits(s, pool, args.rg_dir, args.out_dir) for s in STRATEGIES}
+    os.makedirs(run_dir, exist_ok=True)
+    want = [args.split] if getattr(args, "split", None) else STRATEGIES
+
+    active = []
+    for strategy in want:
+        saved = _llm_saved_strategy_predictions(run_dir, strategy)
+        if saved:
+            print(f"{strategy}: saved LLM strategy results exist -- skipping.")
+            continue
+        # Never silently reuse fine-tuned models/caches across a clean rebuild.
+        # A genuine retrain is intentionally destructive at the run-directory level
+        # so manifest model IDs, uploaded-file IDs and per-fold predictions cannot
+        # survive into the new run. The split source is selected independently by
+        # the paired top-level random/ and rg/ folders.
+        existing_units = glob.glob(os.path.join(run_dir, f"{strategy}__split_*"))
+        manifest_units = _load_manifest(run_dir).get("units", {}) if os.path.exists(_manifest_path(run_dir)) else {}
+        old_state = bool(existing_units) or any(k.startswith(strategy + "__split_") for k in manifest_units)
+        if old_state:
+            sys.exit(f"{strategy}: strategy-level results are missing but old per-fold/model "
+                     f"state still exists under {run_dir}. Refusing to reuse it. For a clean "
+                     f"retrain, delete the entire {run_dir} directory and rerun llm-cv. "
+                     "Leave both random/ and rg/ for exact paper inputs; delete both for "
+                     "corrected-master inputs.")
+        active.append(strategy)
+    if not active:
+        print("llm-cv: all requested strategy artifacts already exist; nothing changed.")
+        return
+
+    splits = {st: get_splits(st, pool, args.rg_dir, args.out_dir) for st in active}
     units_epochs = {}
-    for s, sp in splits.items():
+    for st, sp in splits.items():
         for k, (tr, te) in enumerate(sp):
-            u = _unit(s, k)
+            u = _unit(st, k)
             write_jsonl(tr, os.path.join(run_dir, u, "train.jsonl"))
             write_jsonl(te, os.path.join(run_dir, u, "test.jsonl"))
             units_epochs[u] = epochs
     if args.prep_only:
-        print(f"prepped {len(units_epochs)} CV units (epochs={epochs}) under {run_dir}"); return
+        print(f"prepped {len(units_epochs)} CV units (epochs={epochs}) under {run_dir}")
+        return
+
     m = orchestrate(run_dir, units_epochs, wait=True)
     client = None
-    rows, pooled = [], {s: ([], [], [], [], [], []) for s in STRATEGIES}
-    for s, sp in splits.items():
+    for st, sp in splits.items():
+        rows, pooled = [], {st: ([], [], [], [], [], [])}
+        n_done = 0
         for k, (tr, te) in enumerate(sp):
-            u = _unit(s, k)
+            u = _unit(st, k)
             model = m["units"].get(u, {}).get("fine_tuned_model")
             cache = os.path.join(run_dir, u, "predictions.csv")
             if not os.path.exists(cache) and not model:
-                print(f"  {u}: no model; skip"); continue
+                print(f"  {u}: no model; skip")
+                continue
             t, mean, half, orient, flu = _cached_infer(client, run_dir, u, model, te, temp)
+            n_done += 1
             ok = ~np.isnan(mean)
             ome, r2 = metrics(t[ok], mean[ok])
-            rows.append(dict(strategy=s, split=k, OME=ome, logR2=r2,
+            rows.append(dict(strategy=st, split=k, OME=ome, logR2=r2,
                              n=int(ok.sum()), mean_sigma=float(np.nanmean(half))))
-            pooled[s][0].append(t[ok]); pooled[s][1].append(mean[ok])
-            pooled[s][2].append(half[ok]); pooled[s][3].append(te["smiles"].to_numpy()[ok])
-            pooled[s][4].append(orient[ok]); pooled[s][5].append(flu[ok])
+            pooled[st][0].append(t[ok]); pooled[st][1].append(mean[ok])
+            pooled[st][2].append(half[ok]); pooled[st][3].append(te["smiles"].to_numpy()[ok])
+            pooled[st][4].append(orient[ok]); pooled[st][5].append(flu[ok])
             print(f"  {u}: OME={ome:.3f} logR2={r2:+.3f} n={int(ok.sum())}")
-    _summarize_and_plot(rows, pooled, run_dir, "llm")
+        if n_done == 0:
+            print(f"{st}: no completed folds; no strategy artifact written.")
+            continue
+        complete = (n_done == len(sp))
+        tag = f"llm_{st}" if complete else f"llm_partial_{st}"
+        _summarize_and_plot(rows, {st: pooled[st]}, run_dir, tag, only=[st])
+        state = "COMPLETE" if complete else f"partial ({n_done}/{len(sp)})"
+        print(f"{st}: {state} -> wrote {tag}_* to {run_dir}/")
 
 def _split_hash(te):
     """Content hash of the test rows (identity + target + key features), so the
@@ -1609,9 +1738,26 @@ def mode_llm_report(args):
     run_dir = os.path.join(args.out_dir, "llm_cv")
     m = _load_manifest(run_dir)
     want = [args.split] if getattr(args, "split", None) else STRATEGIES
-    splits = {s: get_splits(s, pool, args.rg_dir, args.out_dir) for s in want}
+    active = []
+    for strategy in want:
+        saved = _llm_saved_strategy_predictions(run_dir, strategy)
+        if saved:
+            print(f"{strategy}: saved LLM strategy report exists -- skipping.")
+            continue
+        existing_units = glob.glob(os.path.join(run_dir, f"{strategy}__split_*"))
+        manifest_units = m.get("units", {})
+        old_state = bool(existing_units) or any(k.startswith(strategy + "__split_") for k in manifest_units)
+        if old_state:
+            sys.exit(f"{strategy}: strategy-level report is missing but historical per-fold/model "
+                     f"state still exists under {run_dir}. Refusing to rebuild a mixed-state report. "
+                     f"For a clean rebuild, delete the entire {run_dir} directory and rerun llm-cv. The presence of both top-level random/ and rg/ selects exact paper inputs; deleting both selects corrected-master inputs.")
+        active.append(strategy)
+    if not active:
+        print("llm-report: all requested strategy artifacts already exist; nothing changed.")
+        return
+    splits = {st: get_splits(st, pool, args.rg_dir, args.out_dir) for st in active}
     client = None
-    for s in want:
+    for s in active:
         sp = splits[s]
         rows, pooled = [], {s: ([], [], [], [], [], [])}
         n_done, n_total = 0, len(sp)
@@ -1660,9 +1806,8 @@ def mode_llm_prod(args):
     ok = ~np.isnan(mean)
     # IN-SAMPLE. The production model trains on all 201 rows and is then asked
     # about those same 201 rows, so this is a fit, not a generalization estimate.
-    # The CI is a CI on the fit. Held-out LLM performance is the validation
-    # figure, on the original CSV. The box says so; do not quote these as
-    # performance.
+    # The CI is a CI on the fit. Held-out LLM performance is the shipped paper
+    # validation figure. The box says so; do not quote these as performance.
     ome, ome_ci, r2, r2_ci, sd = metric_ci(t[ok], mean[ok])
     # row_index = the canonical master-CSV position (load_master_csv reset the
     # index), so a prediction is auditable without leaning on PSMILES or target,
@@ -1698,9 +1843,9 @@ def mode_llm_ablation(args):
     # RG test-chemistry membership from the provided split; rows taken from the
     # master pool (only source with layers/thickness) and restricted to matched-
     # control rows so baseline/+layers/+thickness compare on identical rows.
-    rg_disk = load_rg_dir(args.rg_dir)
+    rg_full = get_splits("restricted-group", pool, args.rg_dir, args.out_dir)
     rg_ctrl = []
-    for _, te_disk in rg_disk:
+    for _, te_disk in rg_full:
         test_chems = set(te_disk["smiles"])
         te = ctrl[ctrl["smiles"].isin(test_chems)].reset_index(drop=True)
         tr = ctrl[~ctrl["smiles"].isin(test_chems)].reset_index(drop=True)
@@ -1781,7 +1926,7 @@ def mode_gpr_opt(args):
     with the variable split reported alongside as a secondary check."""
     pool = load_master_csv(args.data_csv)
     coat = coating_levels(pool)
-    rg = load_rg_dir(args.rg_dir)
+    rg = get_splits("restricted-group", pool, args.rg_dir, args.out_dir)
     var = get_splits("variable", pool, args.rg_dir, args.out_dir)
     rows = []
     total_cfg = len(GPR_BITS_GRID) * len(GPR_RADIUS_GRID) * len(GPR_KERNEL_GRID)
@@ -1833,7 +1978,10 @@ def _gpr_best(args):
 def mode_gpr_cv(args):
     """Winning GPR config on RG(5)+random(10)+variable(10), each + sigma. Each
     split method is written as its own deliverable (gpr_<method>_*), in the
-    order rg, random, variable. Use --split to run just one method."""
+    order rg, random, variable. Existing strategy predictions are frozen and
+    skipped. For a clean rebuild, delete the whole gpr_cv run directory first.
+    The paired top-level random/ and rg/ folders select paper-era inputs; deleting
+    both selects corrected-master inputs. Use --split to run just one method."""
     pool = load_master_csv(args.data_csv)
     report_collisions(pool)
     coat = coating_levels(pool)
@@ -1841,16 +1989,18 @@ def mode_gpr_cv(args):
     print(f"GPR config: bits={bits} radius={radius} kernel={kernel}")
     run_dir = os.path.join(args.out_dir, "gpr_cv"); os.makedirs(run_dir, exist_ok=True)
     want = [args.split] if getattr(args, "split", None) else STRATEGIES
-    force = getattr(args, "force", False)
     for s in want:
-        if not force and _gpr_cache_valid(run_dir, s, args.data_csv, args.out_dir,
-                                          bits, radius, kernel, rg_dir=args.rg_dir):
-            print(f"{s}: saved results validated (config + data + split hash + "
-                  f"fold counts match) -- skipping.")
+        pred_path = os.path.join(run_dir, f"gpr_{s}_predictions.csv")
+        # Published CV artifacts are immutable by default. A normal invocation
+        # must NEVER refit merely because the shipped dataset/provenance changed.
+        # Recalculation is an explicit act. The run directory is the model-cache
+        # reset; split data source is controlled independently by the paired
+        # top-level random/ and rg/ folders.
+        if os.path.exists(pred_path):
+            print(f"{s}: saved results exist -- skipping. For a clean rebuild, delete the entire "
+                  f"{run_dir} directory and rerun gpr-cv. Leave both random/ and rg/ "
+                  "for exact paper inputs; delete both for corrected-master inputs.")
             continue
-        if not force and os.path.exists(os.path.join(run_dir, f"gpr_{s}_predictions.csv")):
-            print(f"{s}: existing results FAILED validation (stale/mismatched) "
-                  f"-- recomputing.")
         sp = get_splits(s, pool, args.rg_dir, args.out_dir)
         print(f"{s}: fitting {len(sp)} GPR folds ...", flush=True)
         rows, pooled = [], {s: ([], [], [], [], [], [])}
@@ -1868,7 +2018,7 @@ def mode_gpr_cv(args):
                             gpr_config=(bits, radius, kernel),
                             data_hash=_dataset_hash(args.data_csv),
                             membership_hash=_membership_hash(args.out_dir, s),
-                            rg_split_hash=(_rg_split_hash(args.rg_dir) if s == "restricted-group" else None))
+                            rg_split_hash=None)
         print(f"{s}: wrote gpr_{s}_* to {run_dir}/\n")
 
 def mode_gpr_prod(args):
@@ -1880,10 +2030,9 @@ def mode_gpr_prod(args):
                   not performance. Its CI is a CI on the fit.
       cv        : KFold(GPR_CV_FOLDS) refits, pooled OUT-OF-FOLD by row. This is
                   the held-out estimate, and it is the ONLY held-out GPR number
-                  computed on the corrected production dataset -- gpr-cv's random
-                  arm is the same split and config but runs on the ORIGINAL CSV
-                  (Sec 1.1), and the corrected SMILES change the fingerprints and
-                  therefore every prediction. Not a duplicate; do not delete it.
+                  computed on the corrected production dataset. The SHIPPED paper
+                  gpr-cv random artifact used the historical pre-cleanup inputs; an
+                  intentional corrected-data gpr-cv rebuild is a separate run.
 
     Both are scored BY ROW via metric_ci(), never by averaging per-fold metrics.
     KFold tests every row exactly once, so the fold boundaries are an
@@ -1965,8 +2114,8 @@ def mode_gpr_ablation(args):
     layers AND thickness): baseline vs +layers vs +thickness. Runs per split
     method (restricted-group, random, variable); use --split for just one,
     else all three. Folds come from get_splits; test/train rows are selected by
-    exact master-row index (random/variable) or by test chemistry set (RG),
-    avoiding the smiles+target identity ambiguity. Reports the BY-ROW OME and
+    exact master-row index for every strategy, avoiding smiles+target identity
+    ambiguity. Reports the BY-ROW OME and
     log-R2 over all matched-control rows, each with a row-bootstrap 95% CI (the
     same metric_ci the figures use, so table and figure agree when built from the
     same run). The per-fold mean/std survive as perfold_* diagnostics only --
@@ -1991,16 +2140,11 @@ def mode_gpr_ablation(args):
         return v
 
     def restrict_fold(tr_full, te_full, strategy):
-        # random/variable: rows carry master indices -> intersect exactly.
-        # restricted-group: RG files have their own indices -> select by the
-        # test chemistry (smiles) set.
-        if strategy in ("random", "variable"):
-            te = ctrl.loc[ctrl.index.intersection(te_full.index)]
-            tr = ctrl.loc[ctrl.index.intersection(tr_full.index)]
-        else:
-            test_smiles = set(te_full["smiles"].astype(str))
-            te = ctrl[ctrl["smiles"].astype(str).isin(test_smiles)]
-            tr = ctrl[~ctrl["smiles"].astype(str).isin(test_smiles)]
+        # Every get_splits strategy in the final release carries canonical
+        # master-row indices, including restricted-group via its frozen
+        # membership file, so matched-control selection is exact by row index.
+        te = ctrl.loc[ctrl.index.intersection(te_full.index)]
+        tr = ctrl.loc[ctrl.index.intersection(tr_full.index)]
         return tr, te
 
     for s in want:
@@ -2193,8 +2337,37 @@ TUNING_FIG = {
 }
 
 ORIENT_MARKERS = {"ram": "o", "zenith": "^", "nadir": "s", "wake": "D", "unknown": "X"}
-SPLIT_COLORS = ["#1f77b4", "#d62728", "#2ca02c", "#9467bd", "#ff7f0e",
-                "#17becf", "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22"]
+
+def _normalise_orientations(values):
+    """Normalize labels for plotting only; stored data is unchanged."""
+    a = pd.Series(values, dtype="object").fillna("unknown")
+    a = a.astype(str).str.strip().str.lower()
+    return a.where(a.isin(ORIENT_MARKERS), "unknown").to_numpy()
+
+def _fluence_log_limits(frames):
+    """Return one shared log10-fluence range for sibling parity panels."""
+    vals = []
+    for d in frames:
+        if d is None or len(d) == 0 or "fluence" not in d:
+            continue
+        f = pd.to_numeric(d["fluence"], errors="coerce").to_numpy(float)
+        lf = np.log10(np.where(f > 0, f, np.nan))
+        vals.extend(lf[np.isfinite(lf)].tolist())
+    if not vals:
+        return None
+    lo, hi = float(np.min(vals)), float(np.max(vals))
+    if np.isclose(lo, hi):
+        lo -= 0.5; hi += 0.5
+    return lo, hi
+
+def _orientation_levels(frames):
+    """Entries for the single orientation legend shared by a figure."""
+    present = set()
+    for d in frames:
+        if d is None or len(d) == 0 or "orientation" not in d:
+            continue
+        present.update(_normalise_orientations(d["orientation"]))
+    return [o for o in ORIENT_MARKERS if o in present]
 
 # ------------------------------------------------------- dataset figure -------
 # Standalone dataset-description figure (data-fig mode). Its own style block:
@@ -2226,6 +2399,26 @@ DATA_FIG = {
     # panel (a) must be at least as tall as its rotated y-label, or the label
     # overflows the axes and the top of the word gets clipped on save.
     "height_ratios":     [1.0, 1.5],
+}
+
+# Standalone numerical-descriptor figure (descriptor-fig mode). This is a
+# read-only dataset visualization: one first row of every descriptor against Ey,
+# followed by every unique descriptor-descriptor pair. All panels use identical
+# circular markers and one colour. Missing values are handled pairwise, so only
+# a panel that actually uses layers or thickness loses those rows.
+DESCRIPTOR_FIG = {
+    "figsize":          (13.0, 17.5),
+    "nrows":            5,
+    "ncols":            3,
+    "point_color":      "#184EA2",
+    "point_size":       34,
+    "point_alpha":      0.78,
+    "edge_color":       "black",
+    "edge_width":       0.30,
+    "grid_alpha":       0.45,
+    "grid_width":       0.50,
+    "panel_wspace":     0.80,
+    "panel_hspace":     0.90,
 }
 
 # Short display names keyed by PSMILES. Abbreviation is preferred over trade
@@ -2598,26 +2791,14 @@ def finalize_parity_panels(fig):
             pass
 def _draw_parity_panel(ax, fig, sub, s, title, show_legend=True, show_colorbar=True,
                        show_ylabel=True, show_xlabel=True, pooled=True,
-                       lim_override=None, style=None):
-    """Draw one parity panel onto a given axis. RG: one colour AND one marker per
-    split. random/variable: orientation -> marker shape, AO fluence -> viridis
-    colour. Returns the metrics (ome, r2) for the panel.
+                       lim_override=None, style=None, fluence_limits=None,
+                       legend_orientations=None):
+    """Draw one parity panel. In every split, colour is AO fluence and marker
+    shape is orientation. Fold identity remains in the data but is not shown."""
+    from matplotlib.colors import Normalize
+    from matplotlib.cm import ScalarMappable
+    from matplotlib.lines import Line2D
 
-    `style` is a scaled_style() dict; it defaults to the canonical PLOT_STYLE.
-    Passing it explicitly (rather than mutating the global) is what lets a wide
-    multi-panel figure render its text at the same size on the page as a narrow
-    one without any figure being able to disturb another's fonts.
-
-    Metrics are BY ROW and both carry the SAME kind of uncertainty: a
-    row-bootstrap 95% percentile CI from metric_ci(), shown in brackets (not
-    +/-, since the intervals are asymmetric). OME's point estimate is the mean of
-    the per-row absolute errors; log-R2 is computed once over every row. The
-    dispersion of the row errors is a diagnostic and lives in the summary CSVs as
-    OME_std_rows -- it is NOT an uncertainty of the estimate and does not belong
-    beside one. Nothing is averaged across folds: the folds are unequal (RG
-    6/6/6/6/5 over 29 rows; the matched-control ablation 6/6/5/5/4 over 26), so a
-    fold-averaged statistic weights a 4-row fold like a 6-row one, and a per-fold
-    R2 on a handful of points is noise."""
     st = PLOT_STYLE if style is None else style
     yt = sub["truth"].to_numpy(float); yp = sub["pred"].to_numpy(float)
     band = sub["band"].to_numpy(float)
@@ -2626,86 +2807,59 @@ def _draw_parity_panel(ax, fig, sub, s, title, show_legend=True, show_colorbar=T
     lo = 10.0 ** (yp - band); hi = 10.0 ** (yp + band)
     yerr = np.vstack([xp - lo, hi - xp])
     allv = np.concatenate([xt, xp])
-    # lim_override lets a caller force the SAME axis range across sibling panels.
-    # Without it each panel derives its own range, so two arms being compared can
-    # look more or less alike purely because their limits differ. Default None
-    # keeps every existing figure byte-identical.
     lim = (list(lim_override) if lim_override is not None else
-           [10 ** np.floor(np.log10(allv.min())), 10 ** np.ceil(np.log10(allv.max()))])
+           [10 ** np.floor(np.log10(allv.min())),
+            10 ** np.ceil(np.log10(allv.max()))])
 
-    # markers_ms[i] = (marker, size_pt) for point i, IN ROW ORDER of sub, so the
-    # overlap test can bound each point's footprint by its own marker.
+    orient = (_normalise_orientations(sub["orientation"])
+              if "orientation" in sub else np.full(len(sub), "unknown", dtype=object))
+    flu = (pd.to_numeric(sub["fluence"], errors="coerce").to_numpy(float)
+           if "fluence" in sub else np.full(len(sub), np.nan))
+    lflu = np.log10(np.where(flu > 0, flu, np.nan))
+    limits = fluence_limits if fluence_limits is not None else _fluence_log_limits([sub])
+    norm = Normalize(vmin=limits[0], vmax=limits[1]) if limits is not None else None
+
     markers_ms = [None] * len(sub)
-    legend_kw = dict(fontsize=st["legend_size"], framealpha=.75, edgecolor="0.6",
-                     borderpad=.45, labelspacing=.4, handletextpad=.5,
-                     borderaxespad=.4)
-    if s == "restricted-group":
-        pos = {ix: i for i, ix in enumerate(sub.index.to_numpy())}
-        for kk, g in sub.groupby("split"):
-            gi = [pos[x] for x in g.index.to_numpy()]
-            # circles for EVERY split: shape carries orientation meaning in the
-            # random/variable panels, so any non-circle here would read as an
-            # orientation claim. Splits are distinguished by colour only.
-            mk = "o"
-            ax.errorbar(xt[gi], xp[gi], yerr=yerr[:, gi], fmt=mk, ms=6, alpha=.9,
-                        lw=.7, capsize=2, color=SPLIT_COLORS[int(kk) % len(SPLIT_COLORS)],
-                        label=f"Split {int(kk)+1}", zorder=2)
-            for i in gi:
-                markers_ms[i] = (mk, 6)
-    else:
-        orient = sub["orientation"].astype(str).str.strip().str.lower().to_numpy()
-        flu = sub["fluence"].to_numpy(float)
-        lflu = np.log10(np.where(flu > 0, flu, np.nan))
-        vmin, vmax = np.nanmin(lflu), np.nanmax(lflu)
-        sc_obj = None
-        for o, mk in ORIENT_MARKERS.items():
-            sel = orient == o
-            if not sel.any():
-                continue
-            ax.errorbar(xt[sel], xp[sel], yerr=yerr[:, sel], fmt="none", ecolor="grey",
-                        alpha=.35, lw=.5, capsize=2, zorder=1)
-            sc_obj = ax.scatter(xt[sel], xp[sel], c=lflu[sel], cmap="viridis",
-                                vmin=vmin, vmax=vmax, marker=mk, s=46,
-                                edgecolors="k", linewidths=.3, zorder=2, label=o)
-        # scatter s is area in points^2; sqrt gives the side/diameter in points.
-        for i, o in enumerate(orient):
-            markers_ms[i] = (ORIENT_MARKERS.get(o, "X"), float(np.sqrt(46)))
-        # Legend handles built by hand in ONE neutral colour: point colour
-        # encodes fluence (the colourbar), so coloured legend markers would
-        # falsely suggest colour maps to orientation. Shape alone differs.
-        from matplotlib.lines import Line2D
-        _hd = [Line2D([], [], linestyle="", marker=mk, markersize=7,
-                      markerfacecolor="0.7", markeredgecolor="k",
-                      markeredgewidth=.4, label=o)
-               for o, mk in ORIENT_MARKERS.items()
-               if (orient == o).any()]
-        if sc_obj is not None and show_colorbar:
-            # Explicit cax via append_axes: a colourbar made with colorbar(ax=ax)
-            # STEALS width from the parity axes (so panels with a colourbar end up
-            # narrower than those without) AND lands wherever matplotlib decides,
-            # which is exactly where the outside-legend fallback wants to go --
-            # that was the legend-under-the-fluence-scale collision. A dedicated
-            # cax keeps the panel full-width and gives the colourbar a KNOWN axes
-            # the finalizer can treat as an obstacle and offset the legend past.
-            from mpl_toolkits.axes_grid1 import make_axes_locatable
-            div = make_axes_locatable(ax)
-            cax = div.append_axes("right", size="4%", pad=0.08)
-            cb = fig.colorbar(sc_obj, cax=cax)
-            cb.set_label("log10 AO fluence (atoms/cm$^2$)",
-                         fontsize=st["colorbar_label_size"])
-            cb.ax.tick_params(labelsize=st["colorbar_tick_size"])
-            ax._parity_colorbar_ax = cax   # obstacle + fallback anchor for finalizer
-        legend_kw.update(title="orientation", title_fontsize=st["legend_title_size"],
-                         handles=_hd)
+    for o, mk in ORIENT_MARKERS.items():
+        sel = orient == o
+        if not sel.any():
+            continue
+        ax.errorbar(xt[sel], xp[sel], yerr=yerr[:, sel], fmt="none", ecolor="grey",
+                    alpha=.35, lw=.5, capsize=2, zorder=1)
+        valid = sel & np.isfinite(lflu)
+        if valid.any() and norm is not None:
+            ax.scatter(xt[valid], xp[valid], c=lflu[valid], cmap="viridis", norm=norm,
+                       marker=mk, s=46, edgecolors="k", linewidths=.3, zorder=2)
+        missing = sel & ~np.isfinite(lflu)
+        if missing.any():
+            ax.scatter(xt[missing], xp[missing], color="0.7", marker=mk, s=46,
+                       edgecolors="k", linewidths=.3, zorder=2)
+    for i, o in enumerate(orient):
+        markers_ms[i] = (ORIENT_MARKERS.get(o, "X"), float(np.sqrt(46)))
 
-    # Axes and limits BEFORE placement: the overlap test transforms data through
-    # ax.transData, which is only final once the scale and limits are set.
+    levels = (list(legend_orientations) if legend_orientations is not None else
+              [o for o in ORIENT_MARKERS if (orient == o).any()])
+    handles = [Line2D([], [], linestyle="", marker=ORIENT_MARKERS[o], markersize=7,
+                      markerfacecolor="0.7", markeredgecolor="k",
+                      markeredgewidth=.4, label=o.capitalize())
+               for o in levels if o in ORIENT_MARKERS]
+    legend_kw = dict(fontsize=st["legend_size"], title="Orientation",
+                     title_fontsize=st["legend_title_size"], handles=handles,
+                     framealpha=.75, edgecolor="0.6", borderpad=.45,
+                     labelspacing=.4, handletextpad=.5, borderaxespad=.4)
+
+    if show_colorbar and norm is not None:
+        from mpl_toolkits.axes_grid1 import make_axes_locatable
+        cax = make_axes_locatable(ax).append_axes("right", size="4%", pad=0.08)
+        sm = ScalarMappable(norm=norm, cmap="viridis"); sm.set_array([])
+        cb = fig.colorbar(sm, cax=cax)
+        cb.set_label("log10 AO fluence (atoms/cm$^2$)",
+                     fontsize=st["colorbar_label_size"])
+        cb.ax.tick_params(labelsize=st["colorbar_tick_size"])
+        ax._parity_colorbar_ax = cax
+
     ax.plot(lim, lim, "k--", lw=1.2, zorder=0)
     ax.set_xscale("log"); ax.set_yscale("log"); ax.set_xlim(lim); ax.set_ylim(lim)
-    # Identical square proportions for EVERY parity panel, in every figure,
-    # regardless of the figure's overall width or panel count. This is what makes
-    # the panels look the same shape across images (the aspect half of the ask);
-    # set_box_aspect fixes the axes BOX to 1:1 without touching the data limits.
     ax.set_box_aspect(1)
     ax.grid(True, which="both", ls=":", lw=.5, alpha=.5)
     ax.tick_params(labelsize=st["tick_label_size"])
@@ -2717,21 +2871,11 @@ def _draw_parity_panel(ax, fig, sub, s, title, show_legend=True, show_colorbar=T
         ax.set_title(title, fontsize=st["title_size"], pad=st["title_pad"])
 
     n_folds = sub["split"].nunique()
-    # Brackets, not +/-: percentile CIs, asymmetric (R2 <= 1, OME >= 0). The
-    # reference figure's box shows a bare OME/LogR2 with no interval; that is NOT
-    # copied -- Sec 1.2 requires the CI and predates that figure.
     metrics_text = (f"OME = {ome_mean:.3f} [{ome_ci[0]:.3f}, {ome_ci[1]:.3f}]\n"
                     f"LogR$^2$ = {r2_mean:.3f} [{r2_ci[0]:.3f}, {r2_ci[1]:.3f}]\n"
                     f"{n_folds} folds, n = {len(yt)} rows")
-    # DEFER placement to after the caller's final tight_layout(): tight_layout
-    # rescales the axes, so any position computed here is measured against a
-    # transform that no longer holds at render time (this was a real bug). We
-    # stash what placement needs; finalize_parity_panels(fig), invoked from
-    # _savefig_multi after layout, does the work -- always testing BOTH the legend
-    # and the metrics box against the data, whether or not this panel shows a
-    # legend (closing the show_legend=False box-untested hole too).
     ax._parity_placement = dict(
-        show_legend=bool(show_legend), legend_kw=legend_kw,
+        show_legend=bool(show_legend and handles), legend_kw=legend_kw,
         metrics_text=metrics_text, metrics_fontsize=st["metrics_size"],
         xt=xt, xp=xp, yerr=yerr, markers_ms=markers_ms, capsize_pt=2)
     return ome_mean, r2_mean
@@ -2869,76 +3013,77 @@ def _load_cv_predictions(model, s, out_dir, rg_dir=None):
         return None
     return df
 
-def _fig_cols(args):
-    """Which split columns to draw. --fig_splits takes a comma-separated list
-    (e.g. 'restricted-group,random' to drop variable); default = all three, in
-    the canonical rg, random, variable order."""
-    raw = getattr(args, "fig_splits", None)
-    if not raw:
-        return list(STRATEGIES)
-    want = [s.strip() for s in raw.split(",") if s.strip()]
-    bad = [s for s in want if s not in STRATEGIES]
-    if bad:
-        sys.exit(f"--fig_splits: unknown split(s) {bad}; choose from {list(STRATEGIES)}")
-    return [s for s in STRATEGIES if s in want]   # canonical order preserved
-
 def mode_validation_fig(args):
-    """Combined CROSS-VALIDATION figure: 2 rows x N cols. Top row = LLM, bottom
-    row = GPR, columns = the selected splits (default rg, random, variable; use
-    --fig_splits to include/exclude, e.g. --fig_splits restricted-group,random).
-
-    This is the validation figure, NOT production: it shows held-out CV
-    performance. Production is llm-prod / gpr-prod -- a single model fit on all
-    201 rows, with its own parity plot.
-
-    A cell is drawn only if that model+split is COMPLETE; otherwise it's left
-    blank and the grid spacing is preserved (no dynamic refitting). Pure
-    replot -- no inference/fitting. Clean (no a/b/c letters)."""
+    """Combined CV figure using the active RG and random splits only.
+    Pure replot: no inference or fitting."""
     out_dir = args.out_dir
     rows = [("llm", "Fine-Tuned GPT-4o"), ("gpr", "Gaussian Process Regression")]
-    cols = _fig_cols(args)
+    cols = ["restricted-group", "random"]
     print(f"validation figure columns: {cols}")
-    # SHARED PARITY CELL (see PARITY_PANEL_W_IN): same per-panel inches as
-    # ablation-fig / gpr-ablation-fig, fonts width-compensated by
-    # scaled_style(fig_w) so all figures match on the page at width=\textwidth.
     fig_w = PARITY_PANEL_W_IN * len(cols)
     st = scaled_style(fig_w)
     fig, axes = plt.subplots(2, len(cols), figsize=(fig_w, PARITY_PANEL_H_IN * 2),
                              squeeze=False)
-    any_drawn = False
-    # ONE legend of each KIND per figure, IN-PANEL, on the TOP row only: the
-    # split legend on the RG column, the orientation legend on the FIRST
-    # orientation-encoded column (random/variable share the encoding, so a
-    # second orientation legend would just repeat it). The bottom (GPR) row
-    # repeats both encodings and carries no legend.
-    seen_orient = False
+
+    panel_data = {}
     for ri, (model, model_name) in enumerate(rows):
-        for ci, s in enumerate(cols):
+        for ci, split_name in enumerate(cols):
+            df = _load_cv_predictions(model, split_name, out_dir,
+                                      rg_dir=getattr(args, "rg_dir", None))
+            if df is not None:
+                panel_data[(ri, ci)] = (model_name, split_name, df)
+    if not panel_data:
+        sys.exit("no complete CV predictions found for RG or random.")
+
+    frames = [item[2] for item in panel_data.values()]
+    fluence_limits = _fluence_log_limits(frames)
+    legend_levels = _orientation_levels(frames)
+    legend_key = next(iter(panel_data))
+    top_keys = [k for k in panel_data if k[0] == min(x[0] for x in panel_data)]
+    colorbar_key = max(top_keys, key=lambda k: k[1])
+
+    for ri, (model, model_name) in enumerate(rows):
+        for ci, split_name in enumerate(cols):
             ax = axes[ri][ci]
-            df = _load_cv_predictions(model, s, out_dir, rg_dir=getattr(args, "rg_dir", None))
-            if df is None:
-                ax.axis("off")     # blank cell, spacing preserved
+            item = panel_data.get((ri, ci))
+            if item is None:
+                ax.axis("off")
                 continue
-            title = f"{model_name} | {PLOT_STYLE['split_display'].get(s, s)}"
-            show_leg = (ri == 0) and (s == "restricted-group" or not seen_orient)
-            _draw_parity_panel(ax, fig, df, s, title, style=st, show_legend=show_leg,
-                               show_ylabel=(ci == 0), show_xlabel=(ri == 1))
-            if show_leg and s != "restricted-group":
-                seen_orient = True
-            any_drawn = True
-    if not any_drawn:
-        sys.exit("no complete CV predictions found for any model/split.")
+            _, _, df = item
+            title = f"{model_name} | {PLOT_STYLE['split_display'].get(split_name, split_name)}"
+            _draw_parity_panel(
+                ax, fig, df, split_name, title, style=st,
+                show_legend=((ri, ci) == legend_key),
+                show_colorbar=((ri, ci) == colorbar_key),
+                show_ylabel=(ci == 0), show_xlabel=(ri == 1),
+                fluence_limits=fluence_limits, legend_orientations=legend_levels)
+
     fig.tight_layout()
+
+    # VALIDATION FIGURE ONLY: vertically center the existing shared AO-fluence
+    # colorbar relative to the full 2x2 parity-panel block.  The colorbar was
+    # created by axes_grid1 with a locator tied to the upper-right panel; that
+    # locator must be detached before setting its position, otherwise the next
+    # draw/save silently snaps it back beside the top row.
+    fig.canvas.draw()
+    cbar_host = axes[colorbar_key[0]][colorbar_key[1]]
+    cbar_ax = getattr(cbar_host, "_parity_colorbar_ax", None)
+    if cbar_ax is not None:
+        visible_panels = [ax for row in axes for ax in row if ax.get_visible()]
+        block_y0 = min(ax.get_position().y0 for ax in visible_panels)
+        block_y1 = max(ax.get_position().y1 for ax in visible_panels)
+        cbar_pos = cbar_ax.get_position().frozen()
+        centered_y0 = 0.5 * (block_y0 + block_y1 - cbar_pos.height)
+        cbar_ax.set_axes_locator(None)
+        cbar_ax.set_position([cbar_pos.x0, centered_y0,
+                              cbar_pos.width, cbar_pos.height])
+
     os.makedirs(out_dir, exist_ok=True)
-    # distinct filename when a subset of splits is drawn, so the full 3-column
-    # figure is never silently overwritten by a 2-column one
-    stem = "validation_figure" if cols == list(STRATEGIES) else \
-           "validation_figure_" + "_".join(s.replace("restricted-group", "rg") for s in cols)
-    out = os.path.join(out_dir, f"{stem}.svg")
+    out = os.path.join(out_dir, "validation_figure.svg")
     _savefig_multi(fig, out)
     plt.close(fig)
-    print(f"wrote {stem}.svg/.pdf/.eps to {out_dir}/ "
-          f"(top row LLM, bottom row GPR; columns {cols}; blank cells = incomplete splits)")
+    print(f"wrote validation_figure.svg/.pdf/.eps to {out_dir}/ "
+          f"(top row LLM, bottom row GPR; columns {cols})")
 
 def mode_plot_only(args):
     """Redraw parity plots from an already-saved predictions CSV -- no fitting,
@@ -3073,6 +3218,110 @@ def mode_data_fig(args):
     _savefig_multi(fig, out)
     plt.close(fig)
     print(f"wrote dataset_figure.svg/.pdf/.eps to {args.out_dir}/")
+
+
+def mode_descriptor_fig(args):
+    """Pairwise numerical-descriptor scatterplots, including every descriptor
+    against erosion yield and every unique descriptor-descriptor combination.
+
+    This mode is completely read-only. It loads the canonical CSV, draws the
+    figure, and writes it to --out_dir. Missing values are removed separately
+    for each panel, so rows lacking layers or thickness remain in every panel
+    that does not use the missing quantity. No models, splits, caches, fitting,
+    inference, or existing result files are touched.
+    """
+    D = dict(DESCRIPTOR_FIG)
+    st = scaled_style(D["figsize"][0])
+    pool = load_master_csv(args.data_csv)
+
+    variables = {
+        "mission_time (yr)": {
+            "label": "Mission Time (yr)",
+            "log": True,
+        },
+        "solar (esh)": {
+            "label": "Solar Exposure (ESH)",
+            "log": True,
+        },
+        "fluence": {
+            "label": "AO Fluence\n(atoms/cm$^2$)",
+            "log": True,
+        },
+        "layers": {
+            "label": "Layers",
+            "log": False,
+        },
+        "thickness (mm)": {
+            "label": "Thickness (mm)",
+            "log": True,
+        },
+        "e_y (A3/atom)": {
+            "label": "Erosion Yield\n" + r"($\mathrm{\AA^3/atom}$)",
+            "log": True,
+        },
+    }
+    missing_columns = [c for c in variables if c not in pool.columns]
+    if missing_columns:
+        sys.exit("descriptor-fig: dataset is missing required column(s): "
+                 + ", ".join(missing_columns))
+
+    values = {c: pd.to_numeric(pool[c], errors="coerce").to_numpy(float)
+              for c in variables}
+    descriptors = ["mission_time (yr)", "solar (esh)", "fluence",
+                   "layers", "thickness (mm)"]
+    ey = "e_y (A3/atom)"
+
+    # First row: every numerical descriptor against Ey. Remaining rows: every
+    # unique descriptor-descriptor pair, with no mirrored duplicates.
+    pairs = [(d, ey) for d in descriptors]
+    pairs.extend((descriptors[i], descriptors[j])
+                 for i in range(len(descriptors))
+                 for j in range(i + 1, len(descriptors)))
+    expected = D["nrows"] * D["ncols"]
+    if len(pairs) != expected:
+        raise RuntimeError(f"descriptor-fig internal layout mismatch: "
+                           f"{len(pairs)} panels for {expected} axes")
+
+    fig, axes = plt.subplots(D["nrows"], D["ncols"], figsize=D["figsize"])
+    axes = np.asarray(axes).reshape(-1)
+    panel_counts = []
+
+    for ax, (xkey, ykey) in zip(axes, pairs):
+        x = values[xkey]
+        y = values[ykey]
+        mask = np.isfinite(x) & np.isfinite(y)
+        if variables[xkey]["log"]:
+            mask &= x > 0
+        if variables[ykey]["log"]:
+            mask &= y > 0
+
+        n = int(mask.sum())
+        panel_counts.append((xkey, ykey, n))
+        ax.scatter(x[mask], y[mask], marker="o", s=D["point_size"],
+                   color=D["point_color"], alpha=D["point_alpha"],
+                   edgecolors=D["edge_color"], linewidths=D["edge_width"])
+        if variables[xkey]["log"]:
+            ax.set_xscale("log")
+        if variables[ykey]["log"]:
+            ax.set_yscale("log")
+
+        ax.set_xlabel(variables[xkey]["label"], fontsize=st["axis_label_size"])
+        ax.set_ylabel(variables[ykey]["label"], fontsize=st["axis_label_size"])
+        ax.tick_params(axis="both", which="both", labelsize=st["tick_label_size"])
+        ax.grid(True, which="both", ls=":", lw=D["grid_width"],
+                alpha=D["grid_alpha"])
+        ax.set_title(f"n = {n}", loc="right", fontsize=st["metrics_size"], pad=4)
+
+    fig.tight_layout(w_pad=D["panel_wspace"], h_pad=D["panel_hspace"])
+    os.makedirs(args.out_dir, exist_ok=True)
+    out = os.path.join(args.out_dir, "descriptor_figure.svg")
+    _savefig_multi(fig, out)
+    plt.close(fig)
+
+    distinct_counts = sorted(set(n for _, _, n in panel_counts), reverse=True)
+    print(f"descriptor-fig: {len(pool)} rows from {args.data_csv}; "
+          f"pairwise panel n values = {distinct_counts}")
+    print(f"wrote descriptor_figure.svg/.pdf/.eps to {args.out_dir}/")
 
 
 def mode_rebuild_bands(args):
@@ -3273,6 +3522,34 @@ def mode_rebuild_bands(args):
             "llm-report if --data_csv has changed since the models were trained -- "
             "it would re-infer the changed rows.")
 
+_ABLATION_ORIENTATION_RE = re.compile(
+    r"oriented in the\s+(.+?)\s+direction for a mission time",
+    re.IGNORECASE,
+)
+_ABLATION_FLUENCE_RE = re.compile(
+    r"atomic oxygen fluence of\s+"
+    r"([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)\s+atom/cm\^2",
+    re.IGNORECASE,
+)
+
+
+def _ablation_plot_metadata(question):
+    """Recover plotting metadata from the exact saved inference question.
+
+    Ablation predictions are historical artifacts. Their PSMILES may differ from
+    a later corrected master CSV, so joining those predictions back to the
+    current dataset can drop rows or shift metadata onto the wrong predictions.
+    The saved question is the authoritative record of the orientation and
+    fluence that were actually supplied for that prediction.
+    """
+    q = str(question)
+    mo = _ABLATION_ORIENTATION_RE.search(q)
+    mf = _ABLATION_FLUENCE_RE.search(q)
+    if mo is None or mf is None:
+        raise ValueError("could not parse orientation/fluence from saved question")
+    return mo.group(1).strip().lower(), float(mf.group(1))
+
+
 def mode_ablation_fig(args):
     """Three parity panels -- baseline / +layers / +thickness -- for the LLM
     ablation, drawn exactly like the restricted-group panel (circles coloured by
@@ -3284,11 +3561,15 @@ def mode_ablation_fig(args):
     raw/rep*.csv, which already hold every individual call (question, prediction,
     truth) from the ablation run. truth = the raw's truth column, pred = mean of
     the repeats, band = sd (ddof=1) across them -- the same 1-sigma convention as
-    everywhere else. NO API calls; nothing is inferred or retrained."""
+    everywhere else. Orientation and fluence are parsed from the exact saved
+    question rather than rejoined through the current dataset, because corrected
+    PSMILES in a newer CSV must not alter or delete historical ablation rows.
+    NO API calls; nothing is inferred or retrained."""
     run_dir = os.path.join(args.out_dir, "llm_ablation")
     if not os.path.isdir(run_dir):
         sys.exit(f"no {run_dir}; run llm-ablation first")
-    conds = [("baseline", "Baseline"), ("layers", "+ Layers"), ("thickness", "+ Thickness")]
+    conds = [("baseline", "Baseline"), ("layers", "+ Layers"),
+             ("thickness", "+ Thickness")]
     panels, missing = {}, []
     for cond, _ in conds:
         pts = []
@@ -3300,11 +3581,26 @@ def mode_ablation_fig(args):
             if not reps:
                 continue
             frames = [pd.read_csv(f) for f in reps]
+            required = {"question", "pred", "truth"}
+            for f, d in zip(reps, frames):
+                miss = required - set(d.columns)
+                if miss:
+                    sys.exit(f"{f}: missing required column(s) {sorted(miss)}")
             n = len(frames[0])
             if any(len(d) != n for d in frames):
-                print(f"  {cond}__split_{k:02d}: repeat files disagree on row count; skipped")
-                continue
+                sys.exit(f"{cond}__split_{k:02d}: repeat files disagree on row count")
             for i in range(n):
+                # All repeats must refer to the same historical input row. Fail
+                # loudly rather than silently shifting metadata between points.
+                q0 = str(frames[0]["question"].iloc[i])
+                t0 = str(frames[0]["truth"].iloc[i]).strip()
+                for j, d in enumerate(frames[1:], start=2):
+                    if str(d["question"].iloc[i]) != q0:
+                        sys.exit(f"{cond}__split_{k:02d} row {i}: question order "
+                                 f"differs in rep{j}.csv")
+                    if str(d["truth"].iloc[i]).strip() != t0:
+                        sys.exit(f"{cond}__split_{k:02d} row {i}: truth differs "
+                                 f"in rep{j}.csv")
                 vals = []
                 for d in frames:
                     try:
@@ -3314,15 +3610,18 @@ def mode_ablation_fig(args):
                 a = np.array(vals, float)
                 nv = int(np.sum(~np.isnan(a)))
                 if nv == 0:
-                    continue
+                    sys.exit(f"{cond}__split_{k:02d} row {i}: all repeats invalid; "
+                             "refusing to silently reduce n")
                 try:
-                    t_i = float(str(frames[0]["truth"].iloc[i]).strip())
-                except (ValueError, TypeError):
-                    continue
-                pts.append(dict(strategy="restricted-group", split=k, truth=t_i,
+                    t_i = float(t0)
+                    orientation, fluence = _ablation_plot_metadata(q0)
+                except (ValueError, TypeError) as e:
+                    sys.exit(f"{cond}__split_{k:02d} row {i}: {e}")
+                pts.append(dict(strategy="restricted-group", split=k,
+                                row_in_fold=i, truth=t_i,
                                 pred=float(np.nanmean(a)),
                                 band=float(np.nanstd(a, ddof=1)) if nv > 1 else 0.0,
-                                orientation="", fluence=np.nan))
+                                orientation=orientation, fluence=fluence))
         if pts:
             panels[cond] = pd.DataFrame(pts)
         else:
@@ -3330,7 +3629,24 @@ def mode_ablation_fig(args):
     if not panels:
         sys.exit(f"no ablation raw repeats found under {run_dir}; nothing to draw")
     if missing:
-        print(f"  no raw repeats for: {', '.join(missing)} -- those panels left blank")
+        sys.exit(f"no raw repeats for: {', '.join(missing)}; refusing a partial figure")
+
+    # Every ablation condition was evaluated on the same matched-control rows.
+    # Enforce that identity before drawing so a future artifact mismatch cannot
+    # quietly change n or compare different rows between panels.
+    ref_name = conds[0][0]
+    ref = panels[ref_name].sort_values(["split", "row_in_fold"]).reset_index(drop=True)
+    for cond, _ in conds[1:]:
+        cur = panels[cond].sort_values(["split", "row_in_fold"]).reset_index(drop=True)
+        if len(cur) != len(ref):
+            sys.exit(f"ablation row-count mismatch: {ref_name}={len(ref)}, "
+                     f"{cond}={len(cur)}")
+        if not np.array_equal(cur[["split", "row_in_fold"]].to_numpy(),
+                              ref[["split", "row_in_fold"]].to_numpy()):
+            sys.exit(f"ablation row-identity mismatch between {ref_name} and {cond}")
+        if not np.allclose(cur["truth"].to_numpy(float), ref["truth"].to_numpy(float),
+                           rtol=0.0, atol=1e-12):
+            sys.exit(f"ablation truth mismatch between {ref_name} and {cond}")
 
     # SHARED PARITY CELL (see PARITY_PANEL_W_IN): same per-panel inches as
     # validation-fig / gpr-ablation-fig, fonts width-compensated by
@@ -3346,16 +3662,22 @@ def mode_ablation_fig(args):
     # and no reserved right margin, so the panels get the full width.
     fig, axes = plt.subplots(1, 3, figsize=(fig_w, fig_h), squeeze=False,
                              gridspec_kw={"width_ratios": wr})
-    first = True
+    frames = list(panels.values())
+    fluence_limits = _fluence_log_limits(frames)
+    legend_levels = _orientation_levels(frames)
+    drawn = [i for i, (cond, _) in enumerate(conds) if cond in panels]
+    legend_ci = drawn[0]
+    colorbar_ci = drawn[-1]
     for ci, (cond, nice) in enumerate(conds):
         ax = axes[0][ci]
         sub = panels.get(cond)
         if sub is None:
             ax.axis("off"); continue
         ome, r2 = _draw_parity_panel(
-            ax, fig, sub, "restricted-group", nice, show_legend=first, style=st,
-            show_ylabel=(ci == 0), show_xlabel=True)
-        first = False
+            ax, fig, sub, "restricted-group", nice,
+            show_legend=(ci == legend_ci), show_colorbar=(ci == colorbar_ci), style=st,
+            show_ylabel=(ci == 0), show_xlabel=True,
+            fluence_limits=fluence_limits, legend_orientations=legend_levels)
         print(f"  {cond:9s}: OME={ome:.3f} logR2={r2:+.3f} "
               f"({sub['split'].nunique()} folds, n={len(sub)})")
     # one model title for the whole figure rather than repeating it per panel.
@@ -3387,10 +3709,7 @@ def mode_ablation_fig(args):
     out = os.path.join(args.out_dir, "ablation_figure.svg")
     _savefig_multi(fig, out)
     plt.close(fig)
-    pd.concat([d.assign(condition=c) for c, d in panels.items()], ignore_index=True).to_csv(
-        os.path.join(run_dir, "ablation_predictions.csv"), index=False)
-    print(f"wrote ablation_figure.svg/.pdf/.eps to {args.out_dir}/ and "
-          f"ablation_predictions.csv to {run_dir}/")
+    print(f"wrote ablation_figure.svg/.pdf/.eps to {args.out_dir}/")
 
 def _load_epoch_arm(run_dir, ep, rg):
     """Concatenate one epoch arm's five per-fold prediction files into a single
@@ -3412,12 +3731,16 @@ def _load_epoch_arm(run_dir, ep, rg):
         exp = len(rg[k][1])
         if len(d) != exp:
             probs.append(f"{ep} epochs, fold {k}: {len(d)} rows, expected {exp} "
-                         f"(from rg/)"); continue
+                         f"(from historical rg/ provenance)"); continue
         for c in ("truth", "pred", "band"):
             if not np.all(np.isfinite(pd.to_numeric(d[c], errors="coerce").to_numpy())):
                 probs.append(f"{ep} epochs, fold {k}: non-finite {c}"); break
         else:
-            d = d.copy(); d["split"] = k; d["strategy"] = "restricted-group"
+            te_meta = rg[k][1].reset_index(drop=True)
+            d = d.copy()
+            d["orientation"] = te_meta["orientation"].astype(str).str.strip().str.lower().to_numpy()
+            d["fluence"] = pd.to_numeric(te_meta["fluence"], errors="coerce").to_numpy()
+            d["split"] = k; d["strategy"] = "restricted-group"
             parts.append(d)
     if probs:
         return None, probs
@@ -3502,14 +3825,16 @@ def mode_tuning_fig(args):
     st = scaled_style(T["figsize"][0])
     gs = GridSpec(2, 2, figure=fig, height_ratios=T["height_ratios"],
                   hspace=0.32, wspace=0.28)
-    # Q8: the Split 1..5 legend is identical across both epoch panels, so it is
-    # drawn once, inside the first one.
+    fluence_limits = _fluence_log_limits(arms.values())
+    legend_levels = _orientation_levels(arms.values())
     for ci, ep in enumerate(EPOCH_GRID):
         ax = fig.add_subplot(gs[0, ci])
         ome, r2 = _draw_parity_panel(ax, fig, arms[ep], "restricted-group",
-                                     f"{ep} Epochs", show_legend=(ci == 0), style=st,
+                                     f"{ep} Epochs", show_legend=(ci == 0),
+                                     show_colorbar=(ci == len(EPOCH_GRID) - 1), style=st,
                                      show_ylabel=(ci == 0), show_xlabel=True,
-                                     lim_override=lim)
+                                     lim_override=lim, fluence_limits=fluence_limits,
+                                     legend_orientations=legend_levels)
         print(f"  {ep:>2} epochs: OME={ome:.3f} logR2={r2:+.3f} n={len(arms[ep])}")
 
     tt = tt.sort_values("temperature")
@@ -3548,22 +3873,21 @@ def mode_tuning_fig(args):
 def mode_gpr_ablation_fig(args):
     """GPR ablation figure: rows = split methods, columns = baseline / +layers /
     +thickness. Mirrors validation-fig's structure (which is rows = models,
-    columns = splits) and uses the SAME _draw_parity_panel, so every panel is the
-    identical code path -- RG rows get split colours, random/variable rows get the
-    orientation-marker + fluence-colourbar encoding, exactly as in the CV figures.
+    columns = splits) and uses the SAME _draw_parity_panel, so every panel uses
+    orientation-marker + fluence-colourbar encoding, exactly as in the CV figure.
 
     A separate figure from the LLM ablation-fig, which stays a single
     restricted-group row because llm-ablation is RG-only by design.
 
     Reads runs/gpr_ablation/gpr_ablation_<split>_predictions.csv, written by
-    gpr-ablation. No refitting, no API calls. Rows are whichever splits have a
-    predictions file; --fig_splits selects a subset in canonical order.
+    gpr-ablation. No refitting, no API calls. Only restricted-group and random
+    prediction files are considered; variable is excluded from this figure.
 
     band = the GP predictive sd -- the same 1-sigma convention as the LLM figure,
     but NOT the same quantity (posterior predictive sd vs scatter across
     stochastic decodes). Say so in the caption."""
     run_dir = os.path.join(args.out_dir, "gpr_ablation")
-    want = _fig_cols(args)
+    want = ["restricted-group", "random"]
     rows = []
     for s in want:
         f = os.path.join(run_dir, f"gpr_ablation_{s}_predictions.csv")
@@ -3598,35 +3922,28 @@ def mode_gpr_ablation_fig(args):
     fig, axes = plt.subplots(nr, 3, figsize=(fig_w, fig_h), squeeze=False,
                              gridspec_kw={"height_ratios": [row_t] * (nr - 1) + [row_b],
                                           "width_ratios": wr})
-    # ONE legend of each KIND per figure, IN-PANEL: the split legend inside the
-    # first panel of the (single) RG row, the orientation legend inside the
-    # first panel of the FIRST orientation-encoded row only -- a second
-    # orientation row would just repeat it. The fluence colourbar (a
-    # quantitative scale, not a legend) stays on each orientation row's last
-    # column, at the figure's right edge, exactly like the validation figure.
-    seen_orient = False
+    frames = [d for _, d in rows]
+    fluence_limits = _fluence_log_limits(frames)
+    legend_levels = _orientation_levels(frames)
+    drawn_keys = [(ri, ci) for ri, (_, d) in enumerate(rows)
+                  for ci, (cond, _) in enumerate(conds)
+                  if not d[d.condition == cond].empty]
+    legend_key = drawn_keys[0]
+    colorbar_key = drawn_keys[-1]
     for ri, (s, d) in enumerate(rows):
-        need_leg = (s == "restricted-group") or not seen_orient
         for ci, (cond, nice) in enumerate(conds):
             ax = axes[ri][ci]
-            sub = d[d.condition == cond]
-            if sub.empty:
+            subd = d[d.condition == cond]
+            if subd.empty:
                 ax.axis("off"); continue
             ome, r2 = _draw_parity_panel(
-                ax, fig, sub, s,
-                # single line, COMPACT split name: the full display name
-                # cannot fit one line -- its rendered width grows faster with
-                # figure width than the column pitch does (0.34*fig_w vs
-                # fig_w/3), so no figure width fixes it. "RG Split" etc. does.
-                f"{PARITY_SPLIT_SHORT.get(s, s)} | {nice}", style=st,
-                show_legend=need_leg, show_colorbar=(ci == 2),
-                show_ylabel=(ci == 0), show_xlabel=(ri == nr - 1))
-            if need_leg:
-                need_leg = False
-                if s != "restricted-group":
-                    seen_orient = True
+                ax, fig, subd, s, f"{PARITY_SPLIT_SHORT.get(s, s)} | {nice}", style=st,
+                show_legend=((ri, ci) == legend_key),
+                show_colorbar=((ri, ci) == colorbar_key),
+                show_ylabel=(ci == 0), show_xlabel=(ri == nr - 1),
+                fluence_limits=fluence_limits, legend_orientations=legend_levels)
             print(f"  {s:16s} {cond:9s}: OME={ome:.3f} logR2={r2:+.3f} "
-                  f"({sub['split'].nunique()} folds, n={len(sub)})")
+                  f"({subd['split'].nunique()} folds, n={len(subd)})")
     # Pin every square axes to the TOP of its slot: set_box_aspect shrinks the
     # axes inside the slot tight_layout allocated, and the default center
     # anchor dumps half that slack ABOVE the panel -- i.e. as a dead gap under
@@ -3649,10 +3966,27 @@ def mode_gpr_ablation_fig(args):
         fig._suptitle.set_va("bottom")
         fig._suptitle.set_y(min(max(_tops) / (fig.dpi * fig_h) + 0.10 / fig_h,
                                 1.0 - 0.50 / fig_h))
+
+    # GPR ABLATION FIGURE ONLY: vertically center the existing shared
+    # AO-fluence colorbar relative to the full two-row parity-panel block.
+    # Detach the axes_grid1 locator first so later draws/saves cannot snap it
+    # back beside the lower-right panel. Its x-position, width and height stay
+    # unchanged; only its vertical position moves.
+    fig.canvas.draw()
+    cbar_host = axes[colorbar_key[0]][colorbar_key[1]]
+    cbar_ax = getattr(cbar_host, "_parity_colorbar_ax", None)
+    if cbar_ax is not None:
+        visible_panels = [ax for ax in axes.flat if ax.get_visible()]
+        block_y0 = min(ax.get_position().y0 for ax in visible_panels)
+        block_y1 = max(ax.get_position().y1 for ax in visible_panels)
+        cbar_pos = cbar_ax.get_position().frozen()
+        centered_y0 = 0.5 * (block_y0 + block_y1 - cbar_pos.height)
+        cbar_ax.set_axes_locator(None)
+        cbar_ax.set_position([cbar_pos.x0, centered_y0,
+                              cbar_pos.width, cbar_pos.height])
+
     os.makedirs(args.out_dir, exist_ok=True)
-    stem = ("gpr_ablation_figure" if [s for s, _ in rows] == list(STRATEGIES)
-            else "gpr_ablation_figure_" + "_".join(s.replace("restricted-group", "rg")
-                                                   for s, _ in rows))
+    stem = "gpr_ablation_figure"
     _savefig_multi(fig, os.path.join(args.out_dir, f"{stem}.svg"))
     plt.close(fig)
     print(f"wrote {stem}.svg/.pdf/.eps to {args.out_dir}/ "
@@ -3672,6 +4006,7 @@ MODES = {
     "plot-only":    mode_plot_only,
     "validation-fig": mode_validation_fig,
     "data-fig":     mode_data_fig,
+    "descriptor-fig": mode_descriptor_fig,
     "rebuild-bands": mode_rebuild_bands,
     "ablation-fig": mode_ablation_fig,
     "tuning-fig":   mode_tuning_fig,
@@ -3685,7 +4020,7 @@ def main():
     ap.add_argument("--data_csv", default="polymer_Ey_dataset_final.csv",
                     help="canonical 201-row dataset (default: polymer_Ey_dataset_final.csv)")
     ap.add_argument("--rg_dir", default="rg",
-                    help="restricted-group split_* folders (default: rg)")
+                    help="historical paper RG split_* directory (default: rg); paired with sibling random/ for exact paper-input retraining")
     ap.add_argument("--out_dir", default="runs")
     ap.add_argument("--epochs", type=int, default=None,
                     help="override winning epochs (else read from llm_best.json)")
@@ -3695,11 +4030,6 @@ def main():
                     default=None, help="run only this one split scheme: restricted-group, random, or variable (default: all)")
     ap.add_argument("--pred_csv", default=None,
                     help="plot-only: path to a saved *_predictions.csv to redraw")
-    ap.add_argument("--force", action="store_true",
-                    help="gpr-cv: refit even if saved results already exist")
-    ap.add_argument("--fig_splits", default=None,
-                    help="validation-fig: comma-separated splits to draw as columns, e.g. "
-                         "'restricted-group,random' to exclude variable. Default: all three.")
     ap.add_argument("--retry_tries", type=int, default=None,
                     help="llm-cv / llm-ablation: transient-error retry budget per unit. "
                          "0 = retry forever. Backoff ramps to a 10 min ceiling for 5xx and a "
