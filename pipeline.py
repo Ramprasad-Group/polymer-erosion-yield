@@ -1435,7 +1435,7 @@ def mode_llm_prod(args):
 
 def mode_llm_ablation(args):
     """layers/thickness ablation (baseline/+layers/+thickness), matched-control
-    rows (only rows with BOTH known). Built for completeness; you already ran it."""
+    rows (only rows with BOTH known)."""
     pool = load_master_csv(args.data_csv)
     epochs = _best_epochs(args)
     temp = _best_temp(args)
