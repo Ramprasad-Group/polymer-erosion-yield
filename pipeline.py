@@ -9,8 +9,8 @@ MODES
                    the selected temperature to llm_temp.json.
     epoch-tune     Compare EPOCH_GRID on the 5 restricted-group folds, reusing
                    compatible llm-cv models when available.
-    llm-cv         Run LLM cross-validation on restricted-group (5), random
-                   (10), and variable/target-stratified (10) folds.
+    llm-cv         Run LLM cross-validation on restricted-group (5) and random
+                   (10) folds.
     llm-report     Report completed llm-cv results from saved artifacts.
     llm-prod       Train one production LLM on all 201 rows and generate its
                    predictions and parity plot.
@@ -20,8 +20,8 @@ MODES
   GPR
     gpr-opt        Sweep fingerprint bits, radius, and kernel settings and write
                    the selected configuration to gpr_best.json.
-    gpr-cv         Run GPR cross-validation on restricted-group (5), random
-                   (10), and variable/target-stratified (10) folds.
+    gpr-cv         Run GPR cross-validation on restricted-group (5) and random
+                   (10) folds.
     gpr-prod       Fit one production GPR on all 201 rows and run 10-fold
                    generalization CV.
     gpr-ablation   Run the baseline, +layers, and +thickness GPR ablations on
@@ -39,8 +39,6 @@ MODES
     gpr-ablation-fig
                    Build the GPR ablation figure from saved predictions.
     ablation-fig   Build the LLM ablation parity figure from saved repeats.
-    rebuild-bands  Recompute cached LLM error bands as one-sigma sample standard
-                   deviations from saved raw repeats.
 
 All modes take --data_csv. If both historical restricted-group and random split
 directories are available through --rg_dir and its sibling random/ directory,
@@ -78,15 +76,13 @@ PLOT_FONT = {
 plt.rcParams.update(PLOT_FONT)
 
 
-from sklearn.model_selection import ShuffleSplit, StratifiedShuffleSplit, StratifiedKFold
+from sklearn.model_selection import ShuffleSplit, StratifiedShuffleSplit
 from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.gaussian_process.kernels import Kernel, Hyperparameter, WhiteKernel
 from sklearn.metrics import r2_score
 
 SEED          = 42
 N_RANDOM      = 10
-N_VARIABLE    = 10
-VAR_BINS      = 5
 COAT_RARE_MIN = 3
 
 FP_BITS       = 2048
@@ -107,8 +103,7 @@ PLOT_STYLE = {
     "colorbar_label_size": 13,
     "colorbar_tick_size":  12,
     "split_display": {"restricted-group": "Restricted-Group Split",
-                      "random": "Random Split",
-                      "variable": "Variable (Target-Stratified) Split"},
+                      "random": "Random Split"},
     "model_display": {"llm": "Fine-Tuned GPT-4o", "gpr": "Gaussian Process Regression"},
     "title_template":  "{model} | {split}",
     "prod_title_template": "{model} | Production (All Data)",
@@ -125,8 +120,7 @@ CANON_FIG_WIDTH_IN = 13.0
 PARITY_PANEL_W_IN   = 6.33
 PARITY_PANEL_H_IN   = 5.5
 PARITY_SUPTITLE_IN  = 0.55
-PARITY_SPLIT_SHORT = {"restricted-group": "RG Split", "random": "Random Split",
-                      "variable": "Variable Split"}
+PARITY_SPLIT_SHORT = {"restricted-group": "RG Split", "random": "Random Split"}
 PARITY_AXES_IN      = 5.0
 PARITY_YLAB_IN      = 1.15
 PARITY_TICK_IN      = 0.50
@@ -251,12 +245,6 @@ def random_splits(pool, n=N_RANDOM):
     kf = KFold(n_splits=n, shuffle=True, random_state=SEED)
     return [(pool.iloc[tr], pool.iloc[te]) for tr, te in kf.split(pool)]
 
-def variable_splits(pool, n=N_VARIABLE, bins=VAR_BINS):
-    y = target(pool)
-    b = pd.qcut(y, bins, labels=False, duplicates="drop")
-    skf = StratifiedKFold(n_splits=n, shuffle=True, random_state=SEED)
-    return [(pool.iloc[tr], pool.iloc[te]) for tr, te in skf.split(pool, b)]
-
 
 def _dataset_hash(data_csv):
     """md5 of the runtime dataset file -- ties cached results to exact data."""
@@ -314,7 +302,7 @@ def _gpr_cache_valid(run_dir, strategy, data_csv, out_dir, bits, radius, kernel,
             return False
         if pv.get("data_hash") != _dataset_hash(data_csv):
             return False
-        if strategy in ("random", "variable"):
+        if strategy == "random":
             if pv.get("membership_hash") != _membership_hash(out_dir, strategy):
                 return False
         elif strategy == "restricted-group":
@@ -322,13 +310,12 @@ def _gpr_cache_valid(run_dir, strategy, data_csv, out_dir, bits, radius, kernel,
                 return False
         if set(str(x) for x in df["strategy"].unique()) != {strategy}:
             return False
-        expected = {"restricted-group": 5, "random": N_RANDOM,
-                    "variable": N_VARIABLE}[strategy]
+        expected = {"restricted-group": 5, "random": N_RANDOM}[strategy]
         folds = sorted(int(x) for x in df["split"].unique())
         if folds != list(range(expected)):
             return False
         got_counts = {int(k): int(v) for k, v in df.groupby("split").size().to_dict().items()}
-        if strategy in ("random", "variable"):
+        if strategy == "random":
             mem_path = os.path.join(out_dir, f"{strategy}_split_membership.csv")
             if os.path.exists(mem_path):
                 mem = pd.read_csv(mem_path)
@@ -445,14 +432,9 @@ def get_splits(strategy, pool, rg_dir=None, out_dir="runs"):
     frozen = _load_split_membership(pool, out_dir, strategy)
     if frozen is not None:
         return frozen
-    if strategy == "variable":
-        splits = variable_splits(pool)
-    else:
-        raise ValueError(f"unknown strategy: {strategy}")
-    _save_split_membership(splits, pool, out_dir, strategy)
-    return splits
+    raise ValueError(f"unknown strategy: {strategy}")
 
-STRATEGIES = ["restricted-group", "random", "variable"]
+STRATEGIES = ["restricted-group", "random"]
 
 def _canon_coating_series(coat_raw, polymer_name):
     c = coat_raw.fillna("none").astype(str).str.strip().str.lower()
@@ -1052,13 +1034,13 @@ def mode_llm_temp_tune(args):
               open(os.path.join(args.out_dir, "llm_temp.json"), "w"), indent=2)
     print(f"BEST temperature = {best.temperature}; wrote llm_temp.json")
     if float(best.temperature) != DEFAULT_TEMPERATURE:
-        n_rv = 201 + 201
+        n_random = 201
         print(f"\n  *** WARNING: the tuned temperature ({best.temperature}) differs from "
               f"DEFAULT_TEMPERATURE ({DEFAULT_TEMPERATURE}).\n"
               f"      _row_key includes the temperature and _best_temp now reads "
               f"llm_temp.json, so llm-cv / llm-report will resolve to {best.temperature}\n"
-              f"      and MISS the cached random/variable predictions (which were run at "
-              f"{DEFAULT_TEMPERATURE}): ~{n_rv} rows x {INFER_REPEATS} = {n_rv*INFER_REPEATS} "
+              f"      and MISS the cached random predictions (which were run at "
+              f"{DEFAULT_TEMPERATURE}): ~{n_random} rows x {INFER_REPEATS} = {n_random*INFER_REPEATS} "
               f"calls, and the numbers\n"
               f"      would not match the ones already reported. The restricted-group rows "
               f"ARE cached at {best.temperature} -- this sweep just wrote them.\n"
@@ -1535,16 +1517,14 @@ def _fit_predict_gpr(tr, te, coat_lvls, bits, radius, kernel):
     return yte, mu, sd, chem, n_drop, orient, flu
 
 def mode_gpr_opt(args):
-    """Sweep bits x radius x kernel; score by pooled OME/log-R2 on RG 5-fold,
-    with the variable split reported alongside as a secondary check."""
+    """Sweep bits x radius x kernel; score by pooled OME/log-R2 on RG 5-fold."""
     pool = load_master_csv(args.data_csv)
     coat = coating_levels(pool)
     rg = get_splits("restricted-group", pool, args.rg_dir, args.out_dir)
-    var = get_splits("variable", pool, args.rg_dir, args.out_dir)
     rows = []
     total_cfg = len(GPR_BITS_GRID) * len(GPR_RADIUS_GRID) * len(GPR_KERNEL_GRID)
     cfg_i = 0
-    print(f"GPR sweep: {total_cfg} configs x (RG 5-fold + variable {len(var)}-fold)", flush=True)
+    print(f"GPR sweep: {total_cfg} configs x RG 5-fold", flush=True)
     for bits in GPR_BITS_GRID:
         for radius in GPR_RADIUS_GRID:
             for kernel in GPR_KERNEL_GRID:
@@ -1560,22 +1540,15 @@ def mode_gpr_opt(args):
                     ome, r2 = metrics(yt, yp)
                     return ome, r2
                 rg_ome, rg_r2 = score(rg)
-                var_ome, var_r2 = score(var)
                 rows.append(dict(bits=bits, radius=radius, kernel=kernel,
-                                 rg_OME=rg_ome, rg_logR2=rg_r2,
-                                 var_OME=var_ome, var_logR2=var_r2))
+                                 rg_OME=rg_ome, rg_logR2=rg_r2))
                 print(f"  bits={bits} r={radius} {kernel:12s} | "
-                      f"RG OME={rg_ome:.3f} logR2={rg_r2:+.3f} | "
-                      f"VAR OME={var_ome:.3f} logR2={var_r2:+.3f}")
+                      f"RG OME={rg_ome:.3f} logR2={rg_r2:+.3f}")
     res = pd.DataFrame(rows).sort_values(["rg_OME", "rg_logR2"],
                                          ascending=[True, False]).reset_index(drop=True)
     os.makedirs(args.out_dir, exist_ok=True)
     res.to_csv(os.path.join(args.out_dir, "gpr_opt_results.csv"), index=False)
     best = res.iloc[0]
-    var_best = res.sort_values(["var_OME", "var_logR2"], ascending=[True, False]).iloc[0]
-    if (best.bits, best.radius, best.kernel) != (var_best.bits, var_best.radius, var_best.kernel):
-        print(f"  NOTE: RG winner ({best.bits},{best.radius},{best.kernel}) != "
-              f"VAR winner ({var_best.bits},{var_best.radius},{var_best.kernel}). Using RG.")
     json.dump({"bits": int(best.bits), "radius": int(best.radius), "kernel": best.kernel},
               open(os.path.join(args.out_dir, "gpr_best.json"), "w"), indent=2)
     print(f"BEST GPR (by RG): bits={int(best.bits)} radius={int(best.radius)} "
@@ -1816,8 +1789,8 @@ def _summarize_and_plot(rows, pooled, run_dir, tag, only=None, gpr_config=None,
         if not sub.empty and "strategy" in sub and "n" in sub:
             per_fold_counts[s] = [int(x) for x in sub[sub.strategy == s]["n"].tolist()]
     prov = {"tag": tag, "seed": SEED, "fp_bits": prov_bits, "fp_radius": prov_radius,
-            "kernel": prov_kernel, "infer_repeats": INFER_REPEATS, "var_bins": VAR_BINS,
-            "n_random": N_RANDOM, "n_variable": N_VARIABLE,
+            "kernel": prov_kernel, "infer_repeats": INFER_REPEATS,
+            "n_random": N_RANDOM,
             "data_hash": data_hash, "membership_hash": membership_hash,
             "rg_split_hash": rg_split_hash,
             "per_fold_counts": per_fold_counts,
@@ -2378,7 +2351,7 @@ def _parity(y, mu, band, title, path, note, orient=None, flu=None, style=None):
         capsize_pt=2)
     fig.tight_layout(); _savefig_multi(fig, path); plt.close(fig)
 
-EXPECTED_SPLITS = {"restricted-group": 5, "random": N_RANDOM, "variable": N_VARIABLE}
+EXPECTED_SPLITS = {"restricted-group": 5, "random": N_RANDOM}
 
 def _load_cv_predictions(model, s, out_dir, rg_dir=None):
     """Load a complete CV prediction set after validating folds and row counts."""
@@ -2398,7 +2371,7 @@ def _load_cv_predictions(model, s, out_dir, rg_dir=None):
         return None
     got_counts = {int(k): int(v) for k, v in df.groupby("split").size().to_dict().items()}
     exp_counts = None
-    if s in ("random", "variable"):
+    if s == "random":
         mem_path = os.path.join(out_dir, f"{s}_split_membership.csv")
         if os.path.exists(mem_path):
             mem = pd.read_csv(mem_path)
@@ -2682,148 +2655,6 @@ def mode_descriptor_fig(args):
           f"pairwise panel n values = {distinct_counts}")
     print(f"wrote descriptor_figure.svg/.pdf/.eps to {args.out_dir}/")
 
-
-def mode_rebuild_bands(args):
-    """Recompute cached LLM bands as sample standard deviations from saved raw repeats and patch compatible prediction files."""
-    plan, skipped = [], []
-    n_units = n_rows = 0
-    for sub_dir in ("llm_cv", "llm_ablation"):
-        run_dir = os.path.join(args.out_dir, sub_dir)
-        if not os.path.isdir(run_dir):
-            continue
-        m = _load_manifest(run_dir)
-        store = _load_rowstore(run_dir)
-        if not store:
-            print(f"{sub_dir}: no row store; nothing to rebuild."); continue
-        by_model = {}
-        for k, r in store.items():
-            by_model.setdefault(str(r.get("model")), []).append(k)
-        updated = {}
-        for udir in sorted(glob.glob(os.path.join(run_dir, "*__split_*"))
-                           + glob.glob(os.path.join(run_dir, "prod"))):
-            u = os.path.basename(udir)
-            model = m["units"].get(u, {}).get("fine_tuned_model")
-            reps = sorted(glob.glob(os.path.join(udir, "raw", "rep*.csv")),
-                          key=lambda p: int("".join(ch for ch in os.path.basename(p)
-                                                    if ch.isdigit()) or 0))
-            if not model or not reps:
-                continue
-            frames = [pd.read_csv(f) for f in reps]
-            n = len(frames[0])
-            if any(len(d) != n for d in frames):
-                skipped.append(f"{sub_dir}/{u}: repeat files disagree on row count "
-                               f"{[len(d) for d in frames]}; unit skipped")
-                continue
-            cand = by_model.get(str(model), [])
-            hit = 0
-            for i in range(n):
-                vals = []
-                for d in frames:
-                    try:
-                        vals.append(float(str(d["pred"].iloc[i]).strip()))
-                    except (ValueError, TypeError):
-                        vals.append(np.nan)
-                a = np.array(vals, float)
-                nv = int(np.sum(~np.isnan(a)))
-                if nv == 0:
-                    continue
-                mu = float(np.nanmean(a))
-                try:
-                    t_i = float(str(frames[0]["truth"].iloc[i]).strip())
-                except (ValueError, TypeError):
-                    skipped.append(f"{sub_dir}/{u}: raw row {i} has an unparseable truth; row skipped")
-                    continue
-                match = [k for k in cand
-                         if np.isclose(round(float(store[k]["truth"]), 3), t_i,
-                                       rtol=0, atol=1e-12)
-                         and np.isclose(float(store[k]["pred"]), mu,
-                                        rtol=1e-9, atol=1e-9)]
-                if not match:
-                    skipped.append(f"{sub_dir}/{u}: raw row {i} (truth {t_i}, mean "
-                                   f"{mu:.6f}) matches no row-store entry; row skipped")
-                    continue
-                k = next((x for x in match if x not in updated), match[0])
-                rec = dict(store[k])
-                rec["band"] = float(np.nanstd(a, ddof=1)) if nv > 1 else 0.0
-                updated[k] = rec; hit += 1
-            if hit:
-                n_units += 1; n_rows += hit
-                print(f"  {sub_dir}/{u}: rebuilt sd for {hit} rows from {len(reps)} repeat files")
-        stale = [k for k in store if k not in updated]
-        if stale:
-            models = sorted({str(store[k].get("model")) for k in stale})
-            skipped.append(f"{sub_dir}: {len(stale)} cached row(s) had no matching raw "
-                           f"repeats; their band is left as-is. Model(s): "
-                           f"{', '.join(x[-18:] for x in models[:4])}"
-                           + (" ..." if len(models) > 4 else ""))
-        if updated:
-            plan.append((run_dir, updated))
-    csv_plan = []
-    for run_dir, updated in plan:
-        store = _load_rowstore(run_dir)
-        band_of, ambiguous = {}, set()
-        for r in updated.values():
-            k = (round(float(r["truth"]), 9), round(float(r["pred"]), 9))
-            if k in band_of and not np.isclose(band_of[k], float(r["band"]),
-                                               rtol=0, atol=1e-12):
-                ambiguous.add(k)
-            band_of[k] = float(r["band"])
-        unsafe = {(round(float(r["truth"]), 9), round(float(r["pred"]), 9))
-                  for k, r in store.items() if k not in updated}
-        if ambiguous:
-            skipped.append(f"{os.path.basename(run_dir)}: {len(ambiguous)} (truth, pred) "
-                           f"pair(s) map to more than one band; prediction CSVs in this "
-                           f"directory left UNTOUCHED rather than risk a wrong band")
-            continue
-        store_name = os.path.basename(_rowstore_path(run_dir))
-        targets = [f for f in
-                   (glob.glob(os.path.join(run_dir, "*_predictions.csv"))
-                    + glob.glob(os.path.join(run_dir, "*__split_*", "predictions.csv"))
-                    + glob.glob(os.path.join(run_dir, "prod", "predictions.csv")))
-                   if os.path.basename(f) != store_name]
-        for f in sorted(set(targets)):
-            try:
-                d = pd.read_csv(f)
-            except Exception as e:
-                skipped.append(f"{os.path.relpath(f, args.out_dir)}: unreadable ({e})")
-                continue
-            if not {"truth", "pred", "band"} <= set(d.columns):
-                continue
-            new_band, miss, risky = [], 0, 0
-            for t, pr, b in zip(d["truth"], d["pred"], d["band"]):
-                k = (round(float(t), 9), round(float(pr), 9))
-                if k in unsafe:
-                    risky += 1; new_band.append(b)
-                elif k in band_of:
-                    new_band.append(band_of[k])
-                else:
-                    new_band.append(b); miss += 1
-            if risky:
-                skipped.append(f"{os.path.relpath(f, args.out_dir)}: {risky} row(s) share a "
-                               f"(truth, pred) with a row that could NOT be rebuilt -- "
-                               f"indistinguishable, so this file is left UNTOUCHED")
-                continue
-            if miss:
-                skipped.append(f"{os.path.relpath(f, args.out_dir)}: {miss} of {len(d)} "
-                               f"rows not in the rebuild -- left UNTOUCHED (stale file?)")
-                continue
-            d["band"] = new_band
-            csv_plan.append((f, d))
-    for run_dir, updated in plan:
-        _append_rowstore(run_dir, list(updated.values()))
-        print(f"{os.path.basename(run_dir)}: row store updated ({len(updated)} rows)")
-    for f, d in csv_plan:
-        d.to_csv(f, index=False)
-        print(f"  patched {os.path.relpath(f, args.out_dir)}")
-    for w in skipped:
-        print(f"  SKIPPED {w}")
-    print(f"\nrebuilt bands for {n_rows} row(s) across {n_units} unit(s); "
-          f"{len(csv_plan)} prediction CSV(s) patched"
-          + (f"; {len(skipped)} item(s) skipped and left unchanged (above)"
-             if skipped else "; nothing skipped")
-          + ".\nNo API calls made. Redraw with plot-only / validation-fig. Do NOT use "
-            "llm-report if --data_csv has changed since the models were trained -- "
-            "it would re-infer the changed rows.")
 
 _ABLATION_ORIENTATION_RE = re.compile(
     r"oriented in the\s+(.+?)\s+direction for a mission time",
@@ -3210,7 +3041,6 @@ MODES = {
     "validation-fig": mode_validation_fig,
     "data-fig":     mode_data_fig,
     "descriptor-fig": mode_descriptor_fig,
-    "rebuild-bands": mode_rebuild_bands,
     "ablation-fig": mode_ablation_fig,
     "tuning-fig":   mode_tuning_fig,
     "gpr-ablation-fig": mode_gpr_ablation_fig,
@@ -3229,8 +3059,8 @@ def main():
                     help="override winning epochs (else read from llm_best.json)")
     ap.add_argument("--temperature", type=float, default=None,
                     help="override inference temperature (else llm_temp.json, else 0.25)")
-    ap.add_argument("--split", choices=["restricted-group", "random", "variable"],
-                    default=None, help="run only this one split scheme: restricted-group, random, or variable (default: all)")
+    ap.add_argument("--split", choices=["restricted-group", "random"],
+                    default=None, help="run only this one split scheme: restricted-group or random (default: all)")
     ap.add_argument("--pred_csv", default=None,
                     help="plot-only: path to a saved *_predictions.csv to redraw")
     ap.add_argument("--retry_tries", type=int, default=None,

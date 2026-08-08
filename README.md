@@ -37,7 +37,7 @@ The target is the atomic oxygen erosion yield `e_y (A3/atom)`, the material volu
 | `ao fluence (atoms/cm2)` | Incident AO per unit area |
 | `layers` | Number of thin film layers |
 | `thickness (mm)` | Per layer thickness in millimeters |
-| `e_y (A3/atom)` | Erosion yield, target, log10 transformed |
+| `e_y (A3/atom)` | Erosion yield; log10 transformed internally by the pipeline |
 
 ## Installation
 
@@ -71,12 +71,13 @@ python pipeline.py <mode> --data_csv polymer_Ey_dataset_final.csv --rg_dir rg
 | `gpr-ablation` | Runs the same feature ablation with GPR. |
 | `validation-fig` | Creates the combined LLM and GPR parity figure from saved predictions. |
 | `data-fig` | Creates the dataset description figure. |
+| `descriptor-fig` | Creates pairwise numerical descriptor and erosion-yield scatterplots. |
 | `tuning-fig` | Creates the epoch and temperature tuning figure. |
 | `ablation-fig` | Creates the LLM ablation parity panels. |
 | `gpr-ablation-fig` | Creates the GPR ablation parity panels. |
 | `plot-only` | Redraws one saved predictions CSV. |
 
-Figure and report modes make no API calls.
+Figure modes make no API calls.
 
 ## Outputs
 
