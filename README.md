@@ -37,7 +37,7 @@ The target is the atomic oxygen erosion yield `e_y (A3/atom)`, the material volu
 | `ao fluence (atoms/cm2)` | Incident AO per unit area |
 | `layers` | Number of thin film layers |
 | `thickness (mm)` | Per layer thickness in millimeters |
-| `e_y (A3/atom)` | Erosion yield; log10 transformed internally by the pipeline |
+| `e_y (A3/atom)` | Erosion yield  |
 
 ## Installation
 
