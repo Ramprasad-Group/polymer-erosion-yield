@@ -23,7 +23,7 @@ polymer-erosion-yield/
 
 ## Dataset
 
-The target is the atomic oxygen erosion yield `e_y (A3/atom)`, the material volume removed per incident oxygen atom. The pipeline models its base 10 logarithm. The data was compiled from multiple NASA LEO missions and exposure studies.
+The target is the base 10 logarithm of atomic oxygen erosion yield `e_y (A3/atom)`, the material volume removed per incident oxygen atom. The data was compiled from multiple NASA LEO missions and exposure studies.
 
 | Column | Description |
 | --- | --- |
