@@ -89,4 +89,4 @@ If you use this dataset or pipeline, please cite the published work.
 
 ## Reproducibility and dataset correction
 
-Three PSMILES entries, Kevlar, Nomex, and PFA, contained minor typos that were identified and corrected after the validation models were trained. Because the same PSMILES errors were present for both models, their comparison is not invalidated. The production models use the corrected dataset; to reproduce the reported validation results, do nothing, while to rerun the pipeline using the corrected dataset, delete both `random/` and `rg/` before running.
+Four PSMILES entries, Kevlar, Nomex, PFA and Eymyd-F contained minor typos that were identified and corrected after the validation models were trained. Because the same PSMILES errors were present for both models, their comparison is not invalidated. The production models use the corrected dataset; to reproduce the reported validation results, do nothing, while to rerun the pipeline using the corrected dataset, delete both `random/` and `rg/` before running.
