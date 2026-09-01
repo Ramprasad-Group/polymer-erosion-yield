@@ -89,4 +89,4 @@ If you use this dataset or pipeline, please cite the published work.
 
 ## Reproducibility and dataset correction
 
-Four PSMILES entries, Kevlar, Nomex, PFA and Eymyd-F contained minor typos that were identified and corrected after the validation models in the paper were trained. Because the same PSMILES errors were present for both models, their comparison is not invalidated. To reproduce the reported validation results, run the pipeline with our `random/` and `rg/` files, while to rerun the pipeline using the corrected dataset, delete both `random/` and `rg/` before running.
+Four PSMILES entries, Kevlar, Nomex, PFA, Eymyd-F and PMDA-DAB contained errors that were identified and corrected after the validation models in the paper were trained. Because the same PSMILES errors were present for both models, their comparison is not invalidated. To reproduce the reported validation results, run the pipeline with our `random/` and `rg/` files, while to rerun the pipeline using the corrected dataset, delete both `random/` and `rg/` before running.
