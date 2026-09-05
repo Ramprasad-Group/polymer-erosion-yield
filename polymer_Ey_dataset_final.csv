@@ -1,4 +1,4 @@
-polymer name,coating name,psmiles,layers,thickness (mils),thickness (mm),e_y (cm3/atom),e_y (A3/atom),log(e_y),mission time (yr),solar exposure (esh),ao fluence (atoms/cm2),mission name,orientation,paper
+polymer description,coating description,psmiles,layers,thickness (mils),thickness (mm),e_y (cm3/atom),e_y (A3/atom),log(e_y),mission time (yr),solar exposure (esh),ao fluence (atoms/cm2),mission name,orientation,paper
 PTFE Teflon (polytetrafluoroethylene),,[*]C(F)(F)C([*])(F)F,Unknown,Unknown,,3.70E-25,0.37,-0.431798276,5.8,11200,8.99E+21,AO114 (LDEF),ram,https://ntrs.nasa.gov/api/citations/19930002806/downloads/19930002806.pdf
 Polyethylene (PE),,[*]C[*],Unknown,Unknown,,3.97E-24,3.97,0.598790507,5.8,11200,8.99E+21,AO114 (LDEF),ram,https://ntrs.nasa.gov/api/citations/19930002806/downloads/19930002806.pdf
 Kapton,,[*]c1ccc(Oc2ccc(-n3c(=O)c4cc5c(=O)n([*])c(=O)c5cc4c3=O)cc2)cc1,Unknown,Unknown,,2.89E-24,2.89,0.460897843,5.8,11200,8.99E+21,AO114 (LDEF),ram,https://ntrs.nasa.gov/api/citations/19930002806/downloads/19930002806.pdf
