@@ -28,8 +28,8 @@ The target is the base 10 logarithm of atomic oxygen erosion yield `e_y (A3/atom
 | Column | Description |
 | --- | --- |
 | `psmiles` | Canonical PSMILES representation |
-| `polymer name` | Polymer name |
-| `coating name` | Coating applied to the material, if any |
+| `polymer description` | Textual description of the polymer identity |
+| `coating description` | Coating applied to the material, if any |
 | `mission name` | Source mission |
 | `orientation` | Exposure orientation, ram / nadir / wake / zenith |
 | `mission time (yr)` | Exposure duration in years |
