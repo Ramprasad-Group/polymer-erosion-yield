@@ -159,6 +159,7 @@ MASTER_REN = {
     "mission time (yr)": "mission_time (yr)",
     "solar exposure (esh)": "solar (esh)",
     "ao fluence (atoms/cm2)": "fluence",
+    "coating description": "coating name", "polymer description": "polymer name",
     "mission name": "mission", "orientation": "orientation",
     "coating name": "coating name", "polymer name": "polymer name",
     "layers": "layers", "thickness (mm)": "thickness (mm)",
