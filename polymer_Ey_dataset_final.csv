@@ -52,7 +52,7 @@ Fluorinated ethylene propylene [Teflon FEP] (FEP/C/FEP),interlayer carbon painte
 Polyimide (PMDA) (Kapton HN),,[*]c1ccc(Oc2ccc(-n3c(=O)c4cc5c(=O)n([*])c(=O)c5cc4c3=O)cc2)cc1,1,5,0.127,1.10E-24,1.1,0.04,0.69,1967,4.84E+18,MISSE 10,zenith,https://ntrs.nasa.gov/citations/20260005331
 Fluorinated ethylene propylene [Teflon FEP],back surface aluminized,[*]C(F)(F)C(F)(F)C(F)(F)C([*])(F)C(F)(F)F,1,5,0.127,6.36E-25,0.636,-0.196542884,0.89,1424,2.97E+20,MISSE 12,ram,https://ntrs.nasa.gov/citations/20260005331
 Fluorinated ethylene propylene [Teflon FEP],,[*]C(F)(F)C(F)(F)C(F)(F)C([*])(F)C(F)(F)F,1,5,0.127,6.50E-25,0.65,-0.187086643,0.89,1424,2.97E+20,MISSE 12,ram,https://ntrs.nasa.gov/citations/20260005331
-Fluorinated ethylene propylene [Teflon FEP],back surface spray painted with BBQ black (carbon) paint*,[*]C(F)(F)C(F)(F)C(F)(F)C([*])(F)C(F)(F)F,1,14,0.3556,1.13E-24,1.13,0.053078443,0.89,1424,2.97E+20,MISSE 12,ram,https://ntrs.nasa.gov/citations/20260005331
+Fluorinated ethylene propylene [Teflon FEP],back surface spray painted with BBQ black (carbon) paint,[*]C(F)(F)C(F)(F)C(F)(F)C([*])(F)C(F)(F)F,1,14,0.3556,1.13E-24,1.13,0.053078443,0.89,1424,2.97E+20,MISSE 12,ram,https://ntrs.nasa.gov/citations/20260005331
 Kapton XC,StaMet,[*]c1ccc(Oc2ccc(-n3c(=O)c4cc5c(=O)n([*])c(=O)c5cc4c3=O)cc2)cc1,1,1,0.0254,2.46E-26,0.0246,-1.609064893,0.89,1424,2.97E+20,MISSE 12,ram,https://ntrs.nasa.gov/citations/20260005331
 Kapton,CV1144-0,[*]c1ccc(Oc2ccc(-n3c(=O)c4cc5c(=O)n([*])c(=O)c5cc4c3=O)cc2)cc1,1,3,0.0762,6.66E-25,0.666,-0.176525771,0.89,1424,2.97E+20,MISSE 12,ram,https://ntrs.nasa.gov/citations/20260005331
 Polyimide (PMDA) (Kapton H),,[*]c1ccc(Oc2ccc(-n3c(=O)c4cc5c(=O)n([*])c(=O)c5cc4c3=O)cc2)cc1,2,5,0.127,3.00E-24,3,0.477121255,0.89,1424,2.97E+20,MISSE 12,ram,https://ntrs.nasa.gov/citations/20260005331
@@ -164,9 +164,9 @@ Fluorinated ethylene propylene (Teflon FEP),,[*]C(F)(F)C(F)(F)C(F)(F)C([*])(F)C(
 Fluorinated ethylene propylene [Teflon FEP] (FEP/Al),back surface aluminized,[*]C(F)(F)C(F)(F)C(F)(F)C([*])(F)C(F)(F)F,1,5,0.127,6.22E-22,622,2.79,0.54,720,4.46E+16,MISSE 9,wake,https://ntrs.nasa.gov/citations/20260005331
 Fluorinated ethylene propylene [Teflon FEP] (FEP/Ag/Inconel),silver and Inconel,[*]C(F)(F)C(F)(F)C(F)(F)C([*])(F)C(F)(F)F,1,5,0.127,5.26E-22,526,2.72,0.54,720,4.46E+16,MISSE 9,wake,https://ntrs.nasa.gov/citations/20260005331
 Fluorinated ethylene propylene [Teflon FEP] (FEP/C/FEP),interlayer carbon painted (India Ink),[*]C(F)(F)C(F)(F)C(F)(F)C([*])(F)C(F)(F)F,1,15,0.381,2.79E-21,2790,3.45,0.54,720,4.46E+16,MISSE 9,wake,https://ntrs.nasa.gov/citations/20260005331
-Fluorinated ethylene propylene [Teflon FEP],indium tin oxide coated-silver,[*]C(F)(F)C(F)(F)C(F)(F)C([*])(F)C(F)(F)F,1,5,0.127,2.00E-24,2,0.3,0.54,720,4.46E+16,MISSE 9,wake,https://ntrs.nasa.gov/citations/20260005331
+Fluorinated ethylene propylene [Teflon FEP],indium tin oxide coated silver,[*]C(F)(F)C(F)(F)C(F)(F)C([*])(F)C(F)(F)F,1,5,0.127,2.00E-24,2,0.3,0.54,720,4.46E+16,MISSE 9,wake,https://ntrs.nasa.gov/citations/20260005331
 Fluorinated ethylene propylene [Teflon FEP],indium tin oxide coated silver,[*]C(F)(F)C(F)(F)C(F)(F)C([*])(F)C(F)(F)F,1,5,0.127,1.74E-24,1.74,0.24,0.54,720,4.46E+16,MISSE 9,wake,https://ntrs.nasa.gov/citations/20260005331
-Kapton HN/Al,indium tin oxide coated,[*]c1ccc(Oc2ccc(-n3c(=O)c4cc5c(=O)n([*])c(=O)c5cc4c3=O)cc2)cc1,1,2,0.0508,3.19E-23,31.9,1.5,0.54,720,4.46E+16,MISSE 9,wake,https://ntrs.nasa.gov/citations/20260005331
+Kapton HN/Al,indium tin oxide,[*]c1ccc(Oc2ccc(-n3c(=O)c4cc5c(=O)n([*])c(=O)c5cc4c3=O)cc2)cc1,1,2,0.0508,3.19E-23,31.9,1.5,0.54,720,4.46E+16,MISSE 9,wake,https://ntrs.nasa.gov/citations/20260005331
 Polyvinyl chloride,,[*]CC([*])Cl,1,5,0.127,1.71E-21,1710,3.23,0.54,720,4.46E+16,MISSE 9,wake,https://ntrs.nasa.gov/citations/20260005331
 Chlorotrifluoroethylene (Kel-F),,[*]C(F)(F)C([*])(F)Cl,1,5,0.127,1.64E-23,16.4,1.21,0.54,1539,3.19E+18,MISSE 9,zenith,https://ntrs.nasa.gov/citations/20260005331
 Polytetrafluoroethylene (PTFE),,[*]C(F)(F)C([*])(F)F,1,5,0.127,8.98E-24,8.98,0.95,0.54,1539,3.19E+18,MISSE 9,zenith,https://ntrs.nasa.gov/citations/20260005331
@@ -174,7 +174,7 @@ Fluorinated ethylene propylene (Teflon FEP),,[*]C(F)(F)C(F)(F)C(F)(F)C([*])(F)C(
 Fluorinated ethylene propylene [Teflon FEP] (FEP/Al),aluminum,[*]C(F)(F)C(F)(F)C(F)(F)C([*])(F)C(F)(F)F,1,5,0.127,1.44E-23,14.4,1.16,0.54,1539,3.19E+18,MISSE 9,zenith,https://ntrs.nasa.gov/citations/20260005331
 Fluorinated ethylene propylene [Teflon FEP] (FEP/Ag/Inconel),silver and Inconel,[*]C(F)(F)C(F)(F)C(F)(F)C([*])(F)C(F)(F)F,1,5,0.127,1.33E-23,13.3,1.12,0.54,1539,3.19E+18,MISSE 9,zenith,https://ntrs.nasa.gov/citations/20260005331
 Fluorinated ethylene propylene [Teflon FEP] (FEP/C/FEP),interlayer carbon painted (India Ink),[*]C(F)(F)C(F)(F)C(F)(F)C([*])(F)C(F)(F)F,1,15,0.381,5.41E-23,54.1,1.73,0.54,1539,3.19E+18,MISSE 9,zenith,https://ntrs.nasa.gov/citations/20260005331
-Indium tin oxide coated silver-Teflon,,[*]C(F)(F)C(F)(F)C(F)(F)C([*])(F)C(F)(F)F,1,5,0.127,6.83E-27,0.01,-2.17,0.54,1539,3.19E+18,MISSE 9,zenith,https://ntrs.nasa.gov/citations/20260005331
+Teflon,Indium tin oxide coated silver,[*]C(F)(F)C(F)(F)C(F)(F)C([*])(F)C(F)(F)F,1,5,0.127,6.83E-27,0.01,-2.17,0.54,1539,3.19E+18,MISSE 9,zenith,https://ntrs.nasa.gov/citations/20260005331
 Polyethylene,,[*]C[*],1,2,0.0508,1.06E-23,10.6,1.03,0.54,1539,3.19E+18,MISSE 9,zenith,https://ntrs.nasa.gov/citations/20260005331
 Polyimide (PMDA) (Kapton HN),,[*]c1ccc(Oc2ccc(-n3c(=O)c4cc5c(=O)n([*])c(=O)c5cc4c3=O)cc2)cc1,1,5,0.127,3.79E-24,3.79,0.58,0.54,1539,3.19E+18,MISSE 9,zenith,https://ntrs.nasa.gov/citations/20260005331
 Polyimide (BPDA) (Upilex-S),,[*]c1ccc2c(c1)C(=O)N(c1ccc(N3C(=O)c4ccc([*])cc4C3=O)cc1)C2=O,1,1,0.0254,6.57E-25,0.66,-0.18,0.54,1539,3.19E+18,MISSE 9,zenith,https://ntrs.nasa.gov/citations/20260005331
