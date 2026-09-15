@@ -38,6 +38,8 @@ The target is the base 10 logarithm of atomic oxygen erosion yield `e_y (A3/atom
 | `layers` | Number of thin film layers |
 | `thickness (mm)` | Per layer thickness in millimeters |
 | `e_y (A3/atom)` | Erosion yield  |
+| `PSMILES source` | Source used to determine PSMILES representation  |
+| `PSMILES comment` | Explanation of how source informs PSMILES representation  |
 
 ## Installation
 
