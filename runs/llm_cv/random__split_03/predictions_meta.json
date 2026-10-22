@@ -1,0 +1,10 @@
+{
+  "model": "ft-gpt-4o-2024-08-06-llm_cv-random__split_03",
+  "temperature": 0.3,
+  "repeats": 10,
+  "variant": "base",
+  "n_rows": 20,
+  "split_hash": "a0c98f662fd1",
+  "n_reused": 20,
+  "n_newly_inferred": 0
+}

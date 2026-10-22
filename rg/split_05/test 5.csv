@@ -1,0 +1,6 @@
+polymer name,coating name,smiles,layers,thickness (mils),thickness (mm),e_y (cm3/atom),e_y (A3/atom),log(e_y),mission_time (yr),solar (esh),fluence,mission,orientation,paper,PSMILES source,PSMILES comment
+BTDA-pp'-DABP,,[*]C(=O)c1ccc(N2C(=O)c3ccc(C(=O)c4ccc5c(c4)C(=O)N(c4ccc([*])cc4)C5=O)cc3C2=O)cc1,1,1.377952756,0.035,2.91e-24,2.91,0.463892989,0.00476598,20.0,3.5e+20,STS-8,ram,https://ntrs.nasa.gov/api/citations/19890004960/downloads/19890004960.pdf,,
+BTDA-pp'-ODA,,[*]C(=O)c1ccc2c(c1)C(=O)N(c1ccc(Oc3ccc(N4C(=O)c5ccc([*])cc5C4=O)cc3)cc1)C2=O,1,1.377952756,0.035,3.97e-24,3.97,0.598790507,0.00476598,20.0,3.5e+20,STS-8,ram,https://ntrs.nasa.gov/api/citations/19890004960/downloads/19890004960.pdf,,
+Polyamide 66 [Nylon 66],,[*]CCCCC(=O)NCCCCCCNC([*])=O,7,2,0.0508,1.8e-24,1.8,0.255272505,4.0,6300.0,8.43e+21,MISSE 2,ram,https://ntrs.nasa.gov/citations/20190025445,,
+Polyamide 6 [Nylon 6],,[*]CCCCCNC([*])=O,8,2,0.0508,3.51e-24,3.51,0.545307116,4.0,6300.0,8.43e+21,MISSE 2,ram,https://ntrs.nasa.gov/citations/20190025445,,
+Xydar (Amoco),,[*]Oc1ccc(-c2ccc(OC(=O)c3ccc(C(=O)Oc4ccc(C([*])=O)cc4)cc3)cc2)cc1,Unknown,Unknown,,2.9e-24,2.9,0.462397998,0.0048231,7.9,2.41e+20,EOIM III,ram,https://arc.aiaa.org/doi/epdf/10.2514/3.26641,https://doi.org/10.1016/S0379-6779(00)00570-1,"identifies xydar as a copolymer of 4-hydroxybenzoic acid, 4,4?-biphenol and terephthalic acid"

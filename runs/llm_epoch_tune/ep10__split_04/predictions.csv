@@ -1,0 +1,6 @@
+smiles,truth,pred,band,orientation,fluence
+[*]C(=O)c1ccc(N2C(=O)c3ccc(C(=O)c4ccc5c(c4)C(=O)N(c4ccc([*])cc4)C5=O)cc3C2=O)cc1,0.4638929889859073,0.582,0.0,ram,3.5e+20
+[*]C(=O)c1ccc2c(c1)C(=O)N(c1ccc(Oc3ccc(N4C(=O)c5ccc([*])cc5C4=O)cc3)cc1)C2=O,0.5987905067631151,0.489,0.0,ram,3.5e+20
+[*]CCCCC(=O)NCCCCCCNC([*])=O,0.25527250510330607,0.281,0.0,ram,8.43e+21
+[*]CCCCCNC([*])=O,0.5453071164658241,0.15760000000000002,0.07574254638796701,ram,8.43e+21
+[*]Oc1ccc(-c2ccc(OC(=O)c3ccc(C(=O)Oc4ccc(C([*])=O)cc4)cc3)cc2)cc1,0.4623979978989561,0.3719,0.03130654883566697,ram,2.41e+20

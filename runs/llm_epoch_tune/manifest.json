@@ -1,0 +1,39 @@
+{
+  "units": {
+    "ep10__split_00": {
+      "train_file_id": "file-redacted",
+      "job_id": "ftjob-redacted",
+      "status": "succeeded",
+      "epochs": 10,
+      "fine_tuned_model": "ft-gpt-4o-2024-08-06-llm_epoch_tune-ep10__split_00"
+    },
+    "ep10__split_01": {
+      "train_file_id": "file-redacted",
+      "job_id": "ftjob-redacted",
+      "status": "succeeded",
+      "epochs": 10,
+      "fine_tuned_model": "ft-gpt-4o-2024-08-06-llm_epoch_tune-ep10__split_01"
+    },
+    "ep10__split_02": {
+      "train_file_id": "file-redacted",
+      "job_id": "ftjob-redacted",
+      "status": "succeeded",
+      "epochs": 10,
+      "fine_tuned_model": "ft-gpt-4o-2024-08-06-llm_epoch_tune-ep10__split_02"
+    },
+    "ep10__split_03": {
+      "train_file_id": "file-redacted",
+      "job_id": "ftjob-redacted",
+      "status": "succeeded",
+      "epochs": 10,
+      "fine_tuned_model": "ft-gpt-4o-2024-08-06-llm_epoch_tune-ep10__split_03"
+    },
+    "ep10__split_04": {
+      "train_file_id": "file-redacted",
+      "job_id": "ftjob-redacted",
+      "status": "succeeded",
+      "epochs": 10,
+      "fine_tuned_model": "ft-gpt-4o-2024-08-06-llm_epoch_tune-ep10__split_04"
+    }
+  }
+}

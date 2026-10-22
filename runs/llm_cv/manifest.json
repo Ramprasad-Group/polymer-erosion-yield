@@ -1,0 +1,109 @@
+{
+  "units": {
+    "restricted-group__split_00": {
+      "train_file_id": "file-redacted",
+      "job_id": "ftjob-redacted",
+      "status": "succeeded",
+      "epochs": 5,
+      "fine_tuned_model": "ft-gpt-4o-2024-08-06-llm_cv-restricted-group__split_00"
+    },
+    "restricted-group__split_01": {
+      "train_file_id": "file-redacted",
+      "job_id": "ftjob-redacted",
+      "status": "succeeded",
+      "epochs": 5,
+      "fine_tuned_model": "ft-gpt-4o-2024-08-06-llm_cv-restricted-group__split_01"
+    },
+    "restricted-group__split_02": {
+      "train_file_id": "file-redacted",
+      "job_id": "ftjob-redacted",
+      "status": "succeeded",
+      "epochs": 5,
+      "fine_tuned_model": "ft-gpt-4o-2024-08-06-llm_cv-restricted-group__split_02"
+    },
+    "restricted-group__split_03": {
+      "train_file_id": "file-redacted",
+      "job_id": "ftjob-redacted",
+      "status": "succeeded",
+      "epochs": 5,
+      "fine_tuned_model": "ft-gpt-4o-2024-08-06-llm_cv-restricted-group__split_03"
+    },
+    "restricted-group__split_04": {
+      "train_file_id": "file-redacted",
+      "job_id": "ftjob-redacted",
+      "status": "succeeded",
+      "epochs": 5,
+      "fine_tuned_model": "ft-gpt-4o-2024-08-06-llm_cv-restricted-group__split_04"
+    },
+    "random__split_00": {
+      "train_file_id": "file-redacted",
+      "job_id": "ftjob-redacted",
+      "status": "succeeded",
+      "epochs": 5,
+      "fine_tuned_model": "ft-gpt-4o-2024-08-06-llm_cv-random__split_00"
+    },
+    "random__split_01": {
+      "train_file_id": "file-redacted",
+      "job_id": "ftjob-redacted",
+      "status": "succeeded",
+      "epochs": 5,
+      "fine_tuned_model": "ft-gpt-4o-2024-08-06-llm_cv-random__split_01"
+    },
+    "random__split_02": {
+      "train_file_id": "file-redacted",
+      "job_id": "ftjob-redacted",
+      "status": "succeeded",
+      "epochs": 5,
+      "fine_tuned_model": "ft-gpt-4o-2024-08-06-llm_cv-random__split_02"
+    },
+    "random__split_03": {
+      "train_file_id": "file-redacted",
+      "job_id": "ftjob-redacted",
+      "status": "succeeded",
+      "epochs": 5,
+      "fine_tuned_model": "ft-gpt-4o-2024-08-06-llm_cv-random__split_03"
+    },
+    "random__split_04": {
+      "train_file_id": "file-redacted",
+      "job_id": "ftjob-redacted",
+      "status": "succeeded",
+      "epochs": 5,
+      "fine_tuned_model": "ft-gpt-4o-2024-08-06-llm_cv-random__split_04"
+    },
+    "random__split_05": {
+      "train_file_id": "file-redacted",
+      "job_id": "ftjob-redacted",
+      "status": "succeeded",
+      "epochs": 5,
+      "fine_tuned_model": "ft-gpt-4o-2024-08-06-llm_cv-random__split_05"
+    },
+    "random__split_06": {
+      "train_file_id": "file-redacted",
+      "job_id": "ftjob-redacted",
+      "status": "succeeded",
+      "epochs": 5,
+      "fine_tuned_model": "ft-gpt-4o-2024-08-06-llm_cv-random__split_06"
+    },
+    "random__split_07": {
+      "train_file_id": "file-redacted",
+      "job_id": "ftjob-redacted",
+      "status": "succeeded",
+      "epochs": 5,
+      "fine_tuned_model": "ft-gpt-4o-2024-08-06-llm_cv-random__split_07"
+    },
+    "random__split_08": {
+      "train_file_id": "file-redacted",
+      "job_id": "ftjob-redacted",
+      "status": "succeeded",
+      "epochs": 5,
+      "fine_tuned_model": "ft-gpt-4o-2024-08-06-llm_cv-random__split_08"
+    },
+    "random__split_09": {
+      "train_file_id": "file-redacted",
+      "job_id": "ftjob-redacted",
+      "status": "succeeded",
+      "epochs": 5,
+      "fine_tuned_model": "ft-gpt-4o-2024-08-06-llm_cv-random__split_09"
+    }
+  }
+}

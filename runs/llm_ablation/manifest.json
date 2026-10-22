@@ -1,0 +1,109 @@
+{
+  "units": {
+    "baseline__split_00": {
+      "train_file_id": "file-redacted",
+      "job_id": "ftjob-redacted",
+      "status": "succeeded",
+      "epochs": 5,
+      "fine_tuned_model": "ft-gpt-4o-2024-08-06-llm_ablation-baseline__split_00"
+    },
+    "baseline__split_01": {
+      "train_file_id": "file-redacted",
+      "job_id": "ftjob-redacted",
+      "status": "succeeded",
+      "epochs": 5,
+      "fine_tuned_model": "ft-gpt-4o-2024-08-06-llm_ablation-baseline__split_01"
+    },
+    "baseline__split_02": {
+      "train_file_id": "file-redacted",
+      "job_id": "ftjob-redacted",
+      "status": "succeeded",
+      "epochs": 5,
+      "fine_tuned_model": "ft-gpt-4o-2024-08-06-llm_ablation-baseline__split_02"
+    },
+    "baseline__split_03": {
+      "train_file_id": "file-redacted",
+      "job_id": "ftjob-redacted",
+      "status": "succeeded",
+      "epochs": 5,
+      "fine_tuned_model": "ft-gpt-4o-2024-08-06-llm_ablation-baseline__split_03"
+    },
+    "baseline__split_04": {
+      "train_file_id": "file-redacted",
+      "job_id": "ftjob-redacted",
+      "status": "succeeded",
+      "epochs": 5,
+      "fine_tuned_model": "ft-gpt-4o-2024-08-06-llm_ablation-baseline__split_04"
+    },
+    "layers__split_00": {
+      "train_file_id": "file-redacted",
+      "job_id": "ftjob-redacted",
+      "status": "succeeded",
+      "epochs": 5,
+      "fine_tuned_model": "ft-gpt-4o-2024-08-06-llm_ablation-layers__split_00"
+    },
+    "layers__split_01": {
+      "train_file_id": "file-redacted",
+      "job_id": "ftjob-redacted",
+      "status": "succeeded",
+      "epochs": 5,
+      "fine_tuned_model": "ft-gpt-4o-2024-08-06-llm_ablation-layers__split_01"
+    },
+    "layers__split_02": {
+      "train_file_id": "file-redacted",
+      "job_id": "ftjob-redacted",
+      "status": "succeeded",
+      "epochs": 5,
+      "fine_tuned_model": "ft-gpt-4o-2024-08-06-llm_ablation-layers__split_02"
+    },
+    "layers__split_03": {
+      "train_file_id": "file-redacted",
+      "job_id": "ftjob-redacted",
+      "status": "succeeded",
+      "epochs": 5,
+      "fine_tuned_model": "ft-gpt-4o-2024-08-06-llm_ablation-layers__split_03"
+    },
+    "layers__split_04": {
+      "train_file_id": "file-redacted",
+      "job_id": "ftjob-redacted",
+      "status": "succeeded",
+      "epochs": 5,
+      "fine_tuned_model": "ft-gpt-4o-2024-08-06-llm_ablation-layers__split_04"
+    },
+    "thickness__split_00": {
+      "train_file_id": "file-redacted",
+      "job_id": "ftjob-redacted",
+      "status": "succeeded",
+      "epochs": 5,
+      "fine_tuned_model": "ft-gpt-4o-2024-08-06-llm_ablation-thickness__split_00"
+    },
+    "thickness__split_01": {
+      "train_file_id": "file-redacted",
+      "job_id": "ftjob-redacted",
+      "status": "succeeded",
+      "epochs": 5,
+      "fine_tuned_model": "ft-gpt-4o-2024-08-06-llm_ablation-thickness__split_01"
+    },
+    "thickness__split_02": {
+      "train_file_id": "file-redacted",
+      "job_id": "ftjob-redacted",
+      "status": "succeeded",
+      "epochs": 5,
+      "fine_tuned_model": "ft-gpt-4o-2024-08-06-llm_ablation-thickness__split_02"
+    },
+    "thickness__split_03": {
+      "train_file_id": "file-redacted",
+      "job_id": "ftjob-redacted",
+      "status": "succeeded",
+      "epochs": 5,
+      "fine_tuned_model": "ft-gpt-4o-2024-08-06-llm_ablation-thickness__split_03"
+    },
+    "thickness__split_04": {
+      "train_file_id": "file-redacted",
+      "job_id": "ftjob-redacted",
+      "status": "succeeded",
+      "epochs": 5,
+      "fine_tuned_model": "ft-gpt-4o-2024-08-06-llm_ablation-thickness__split_04"
+    }
+  }
+}
